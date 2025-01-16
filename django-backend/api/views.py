@@ -6,8 +6,8 @@ import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Puntos de nube: Colección de puntos en un espacio tridimensional, normalmente incluidos con intensidad y color
-# Dimensión : [x, y, z, intensidad, r, g, b]
+# Puntos de nube: Representación digital tridimensional compuesta por múltiples puntos coordenados (X, Y, Z), cada uno con atributos adicionales como color e intensidad. Estos datos se obtienen típicamente mediante escáneres láser 3D, LiDAR u otros sistemas de captura, y se utilizan en cartografía, modelado 3D, ingeniería inversa y análisis espacial.
+# Atributos particulares: [x, y, z, intensidad, r, g, b]
 
 class PointCloudView(APIView):
     def post(self, request):
@@ -38,32 +38,32 @@ class PointCloudView(APIView):
             print(f"Rango B: {b.min()} a {b.max()}")
 
             print(f"Rango intensidad: {intensidad.min()} a {intensidad.max()}")
-            print(f"Media intensidad: {intensidad.mean():.2f}")
-            print(f"Desviación estándar intensidad: {intensidad.std():.2f}")
+            #print(f"Media intensidad: {intensidad.mean():.2f}")
+            #print(f"Desviación estándar intensidad: {intensidad.std():.2f}")
 
             # Normaliza la coordenada Z
-            z_normalizada = (z - z.min()) / (z.max() - z.min())
+            #z_normalizada = (z - z.min()) / (z.max() - z.min())
 
             # Crea una paleta de colores basada en Z (gradiente azul -> rojo)
-            colores_z = np.zeros((point_cloud.shape[0], 3))  # Inicializa matriz RGB
-            colores_z[:, 0] = z_normalizada  # Rojo proporcional a Z
-            colores_z[:, 2] = 1 - z_normalizada  # Azul inversamente proporcional a Z
+            #colores_z = np.zeros((point_cloud.shape[0], 3))  # Inicializa matriz RGB
+            #colores_z[:, 0] = z_normalizada  # Rojo proporcional a Z
+            #colores_z[:, 2] = 1 - z_normalizada  # Azul inversamente proporcional a Z
 
             # Asigna colores al gráfico
             # Gráfico de nube de puntos
             # Crear objeto Open3D PointCloud
             cloud = o3d.geometry.PointCloud()
             cloud.points = o3d.utility.Vector3dVector(point_cloud[:, :3])  # Coordenadas x, y, z
-            cloud.colors = o3d.utility.Vector3dVector(colores_z)
+            #cloud.colors = o3d.utility.Vector3dVector(colores_z)
 
             # Visualizar la nube de puntos
-            o3d.visualization.draw_geometries([cloud], window_name="Visualización con Z como color")
+            #o3d.visualization.draw_geometries([cloud], window_name="Visualización con Z como color")
 
             # Normaliza la intensidad
             intensidad_normalizada = (intensidad - intensidad.min()) / (intensidad.max() - intensidad.min())
 
-            # Aplica la paleta viridis
-            cmap = plt.cm.viridis
+            # Aplica la paleta inferno
+            cmap = plt.cm.inferno
             colores_intensidad = cmap(intensidad_normalizada)[:, :3]  # Extrae solo los valores RGB
 
             # Asigna colores al gráfico

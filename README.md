@@ -7,7 +7,7 @@ Por cada pulso láser emitido y recibido, se registra un punto con las siguiente
 
  - Coordenadas X, Y, Z: Representan la posición tridimensional del punto en el espacio.
  - Intensidad de retorno: Indica la cantidad de luz que regresó al sensor. Esta métrica proporciona información sobre la reflectividad de la superficie del objeto, ayudando a identificar materiales o texturas.
- - Color: Valores RGB (rojo, verde y azul) que añaden información visual adicional a los datos.
+ - Color: Valores RGB (rojo, verde y azul).
 
 ## Aplicaciones
 
@@ -19,14 +19,14 @@ Las nubes de puntos tienen un amplio rango de aplicaciones en diferentes sectore
 - **Evaluación de estructuras arquitectónicas:** Las nubes de puntos son útiles para determinar deformaciones en edificios, puentes o monumentos históricos. Por ejemplo, pueden emplearse para monitorear el desgaste en columnas de un edificio histórico debido al paso del tiempo.
 
 ### 2. **Ingeniería inversa**
-- Las nubes de puntos permiten recrear modelos tridimensionales precisos de objetos físicos, lo que es útil en la fabricación de piezas de repuesto o en la optimización de diseños existentes. Por ejemplo, una pieza dañada de maquinaria pesada puede ser escaneada para replicarla mediante impresión 3D o técnicas de mecanizado.
+Las nubes de puntos permiten recrear modelos tridimensionales precisos de objetos físicos, lo que es útil en la fabricación de piezas de repuesto o en la optimización de diseños existentes. Por ejemplo, una pieza dañada de maquinaria pesada puede ser escaneada para replicarla mediante impresión 3D o técnicas de mecanizado.
 
 ### 3. **Construcción y diseño urbano**
 - **Modelado 3D de terrenos y edificios:** Las nubes de puntos permiten crear modelos digitales de terrenos para planificar proyectos de construcción, carreteras o sistemas de drenaje.
 - **Gestión del espacio urbano:** Ayudan a identificar zonas de riesgo, como áreas propensas a inundaciones, o a planificar la distribución de servicios públicos en una ciudad.
 
 ### 4. **Industria del entretenimiento**
-- En cine y videojuegos, las nubes de puntos se emplean para capturar escenarios reales y transformarlos en entornos virtuales realistas. Por ejemplo, en la producción de películas, se escanean locaciones para recrearlas digitalmente con alto nivel de detalle.
+En cine y videojuegos, las nubes de puntos se emplean para capturar escenarios reales y transformarlos en entornos virtuales realistas. Por ejemplo, en la producción de películas, se escanean locaciones para recrearlas digitalmente con alto nivel de detalle.
 
 ### 5. **Autonomía y navegación**
 - **Vehículos autónomos:** Los sensores LiDAR generan nubes de puntos en tiempo real para detectar obstáculos, calcular distancias y navegar de forma segura en entornos complejos. Por ejemplo, un coche autónomo utiliza nubes de puntos para identificar peatones, señales de tráfico y otros vehículos.
