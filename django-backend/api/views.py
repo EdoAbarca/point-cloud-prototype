@@ -128,11 +128,11 @@ class PointCloudView(APIView):
             return Response("Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST)
 
     #Definir funcion para encapsular muestras de nube de puntos y no repetir codigo
-    def get(self, request, id=None):
-        if id:
+    def get(self, request):
+        # Path a la nube de puntos
+        file_path = request.GET.get('filepath') or None
+        if file_path:
             try:
-                # Path a la nube de puntos
-                file_path = id
                 print(f"Cargando nube de punto desde: {file_path}")
 
                 # carga de nube de puntos, salta la primera fila (puede contener metadatos)
@@ -192,7 +192,7 @@ class PointCloudView(APIView):
                 return Response("Nube de puntos visualizada correctamente", status=status.HTTP_200_OK)
             except Exception as e:
                 return Response("Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST)
-        else:
+        else: #Se muestran todos
             try:
                 routes = {key: value for key, value in os.environ.items() if "FARO" in key}
                 for key, value in routes.items():
