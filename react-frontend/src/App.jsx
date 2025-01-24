@@ -1,12 +1,21 @@
-import PointCloudViewer from './views/PointCloudViewer';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { MainView } from "./views/MainView";
+import { PointsView } from "./views/PointsView";
+import { MeshesView } from "./views/MeshesView";
+import { CreateMeshView } from "./views/CreateMeshView";
 
-const App = () => {
+export default function App() {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Point Cloud Viewer</h1>
-      <PointCloudViewer />
-    </div>
+    <Router>
+      <div className="min-h-screen bg-zinc-900 text-white p-4">
+        <Routes>
+          <Route path="/" element={<MainView />} />
+          <Route path="/points" element={<PointsView />} />
+          <Route path="/meshes" element={<MeshesView />} />
+          <Route path="/create-mesh" element={<CreateMeshView />} />
+        </Routes>
+      </div>
+    </Router>
   );
-};
-
-export default App;
+}
