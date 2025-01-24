@@ -16,15 +16,15 @@ def load_3d_mesh(file_path):
 		raise ValueError("Failed to load mesh or mesh is empty")
 	return mesh
 
-def print_3d_mesh_info(mesh):
-		info = {
-			"vertices": len(mesh.vertices),
-			"triangles": len(mesh.triangles),
-			"edges": len(mesh.edges) if hasattr(mesh, 'edges') else "N/A",
-			"vertex_normals": len(mesh.vertex_normals),
-			"triangle_normals": len(mesh.triangle_normals),
-		}
-		return info
+def mesh_3d_info(mesh):
+	info = {
+		"vertices": len(mesh.vertices),
+		"triangles": len(mesh.triangles),
+		"edges": len(mesh.edges) if hasattr(mesh, 'edges') else "N/A",
+		"vertex_normals": len(mesh.vertex_normals),
+		"triangle_normals": len(mesh.triangle_normals),
+	}
+	return info
 
 def plot_3d_mesh(mesh):
 	if not mesh.has_vertices():

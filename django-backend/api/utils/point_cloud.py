@@ -16,7 +16,7 @@ def is_point_cloud(file_path):
 def load_point_cloud(file_path):
 	return np.loadtxt(file_path, skiprows=1)
 
-def print_point_cloud_info(point_cloud):
+def point_cloud_info(point_cloud):
 	# Lectura de datos
 	x, y, z = (
 		point_cloud[:, 0],
@@ -31,19 +31,20 @@ def print_point_cloud_info(point_cloud):
 	)  # Colores
 
 	# Análisis de datos
-	print(f"Número de puntos: {point_cloud.shape[0]}")
-	print(f"Ejemplo de fila:\n{point_cloud[:5]}")
-	print(f"Rango X: {x.min()} a {x.max()}")
-	print(f"Rango Y: {y.min()} a {y.max()}")
-	print(f"Rango Z: {z.min()} a {z.max()}")
-
-	print(f"Rango R: {r.min()} a {r.max()}")
-	print(f"Rango G: {g.min()} a {g.max()}")
-	print(f"Rango B: {b.min()} a {b.max()}")
-
-	print(f"Rango intensidad: {intensidad.min()} a {intensidad.max()}")
-	print(f"Media intensidad: {intensidad.mean():.2f}")
-	print(f"Desviación estándar intensidad: {intensidad.std():.2f}")
+	info = {
+		"numero_puntos": point_cloud.shape[0],
+		"ejemplo_fila": point_cloud[:5].tolist(),
+		"rango_x": (x.min(), x.max()),
+		"rango_y": (y.min(), y.max()),
+		"rango_z": (z.min(), z.max()),
+		"rango_r": (r.min(), r.max()),
+		"rango_g": (g.min(), g.max()),
+		"rango_b": (b.min(), b.max()),
+		"rango_intensidad": (intensidad.min(), intensidad.max()),
+		"media_intensidad": intensidad.mean(),
+		"desviacion_estandar_intensidad": intensidad.std(),
+	}
+	return info
 
 def generate_cloud(point_cloud):
 
