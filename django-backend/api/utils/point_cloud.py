@@ -8,8 +8,7 @@ import matplotlib.pyplot as plt
 # - Intensidad: Valor de reflectancia o brillo del punto al impactar con una superficie.
 # - r, g, b: Componentes de color rojo, verde y azul, respectivamente.
 
-# Funciones de utilidad
-# Puntos de nube
+# Funciones de utilidad puntos de nube
 def is_point_cloud(file_path):
 	file_type = file_path.split(".")[-1]
 	return file_type == "pts"
@@ -46,7 +45,7 @@ def print_point_cloud_info(point_cloud):
 	print(f"Media intensidad: {intensidad.mean():.2f}")
 	print(f"Desviación estándar intensidad: {intensidad.std():.2f}")
 
-def plot_point_cloud(file_path, point_cloud):
+def generate_cloud(point_cloud):
 
 	# Gráfico de nube de puntos
 	# Coordenadas x, y, z
@@ -73,7 +72,13 @@ def plot_point_cloud(file_path, point_cloud):
 	# Asigna colores al gráfico
 	cloud.colors = o3d.utility.Vector3dVector(colores_intensidad)
 
-	# Visualización
+	# Se retorna la nube de puntos lista para visualización
+	return cloud
+
+	
+def plot_cloud(cloud, file_path):
+
+	# Visualización de nube de puntos
 	o3d.visualization.draw_geometries(
 		[cloud],
 		window_name=f"Visualización con intensidad de nube de punto {file_path}",
