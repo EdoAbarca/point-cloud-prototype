@@ -13,8 +13,40 @@ def is_point_cloud(file_path):
 	file_type = file_path.split(".")[-1]
 	return file_type == "pts"
 
+class InvalidPointCloudError(Exception):
+    """Raised when the point cloud data is invalid."""
+    pass
+
+class UnsupportedFileFormatError(Exception):
+    """Raised when the file format is not supported."""
+    pass
+
 def load_point_cloud(file_path):
-	return np.loadtxt(file_path, skiprows=1)
+    """
+    Loads a point cloud from a file and validates its structure.
+
+    Args:
+        file_path (str): Path to the point cloud file.
+
+    Returns:
+        np.ndarray: A numpy array of the point cloud data.
+
+    Raises:
+        UnsupportedFileFormatError: If the file format is not supported.
+        InvalidPointCloudError: If the point cloud data is invalid.
+    """
+    if not is_point_cloud(file_path):
+        raise UnsupportedFileFormatError("The provided file is not a supported point cloud format.")
+
+    try:
+        point_cloud = np.loadtxt(file_path, skiprows=1)
+    except Exception as e:
+        raise InvalidPointCloudError(f"Failed to load point cloud data: {e}")
+
+    if point_cloud.shape[1] != 7:
+        raise InvalidPointCloudError("Point cloud data must have exactly 7 columns.")
+    
+    return point_cloud
 
 def point_cloud_info(point_cloud):
 	# Lectura de datos
