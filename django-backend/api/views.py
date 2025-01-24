@@ -9,7 +9,9 @@ from .utils.mesh_3d import is_3d_mesh, load_3d_mesh, mesh_3d_info, plot_3d_mesh,
 
 load_dotenv()
 
-class PointCloudView(APIView):
+
+#Clases a ser llamadas desde ThunderClient (Test backend)
+class PointCloudBackendView(APIView):
 	def post(self, request):
 		try:
 			# Path a la nube de puntos
@@ -38,6 +40,7 @@ class PointCloudView(APIView):
 			# Generación de nube de puntos
 			cloud = generate_cloud(point_cloud)
 
+			# Generación de malla 3D en base al algoritmo entregado
 			if algorithm == "delaunay":
 				print("Generando malla con Triangulación Delaunay...")
 				mesh, output = create_delaunay_mesh(cloud, file_path, alpha=1.0)
@@ -69,7 +72,6 @@ class PointCloudView(APIView):
 		except Exception as e:
 			return Response("Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST)
 
-	# Definir funcion para encapsular muestras de nube de puntos y no repetir codigo
 	def get(self, request):
 
 		# Path a la nube de puntos
@@ -124,7 +126,7 @@ class PointCloudView(APIView):
 				)
 
 
-class Mesh3DView(APIView):
+class Mesh3DBackendView(APIView):
 	def get(self, request):
 		# Path a la malla 3D
 		file_path = request.GET.get("filepath") or None
@@ -171,3 +173,183 @@ class Mesh3DView(APIView):
 				return Response(
 					"Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST
 				)
+
+#Clases a ser llamadas desde el frontend
+class PointCloudView(APIView):
+	def post(self, request):
+		try:
+			# Path a la nube de puntos
+			file_path = request.data["filepath"]
+			print(f"Cargando nube de punto desde: {file_path}")
+
+			# Algoritmo a usar para la generación de mallas
+			algorithm = request.data["algorithm"]
+			print(f"Algoritmo a usar: {algorithm}")
+
+			# Carga de nube de puntos, salta la primera fila (contiene metadatos)
+			point_cloud = load_point_cloud(file_path)
+
+			# Muestra de datos
+			print(point_cloud_info(point_cloud))
+
+			# Normaliza la intensidad
+			intensidad = point_cloud[:, 3]
+			intensidad_normalizada = (intensidad - intensidad.min()) / (
+				intensidad.max() - intensidad.min()
+			)
+
+			# Aplica la paleta inferno
+			#cmap = plt.cm.inferno
+
+			# Generación de nube de puntos
+			cloud = generate_cloud(point_cloud)
+
+			# Generación de malla 3D en base al algoritmo entregado
+			if algorithm == "delaunay":
+				print("Generando malla con Triangulación Delaunay...")
+				mesh, output = create_delaunay_mesh(cloud, file_path, alpha=1.0)
+			elif algorithm == "poisson":
+				print("Generando malla con Poisson...")
+				mesh, output, densities = create_poisson_mesh(cloud, file_path, radius=0.025, max_nn=30, depth=9)
+			elif algorithm == "threshold":
+				print("Generando malla con Algoritmos de Umbrales...")
+				mesh, output = create_threshold_mesh(point_cloud, file_path, intensidad_normalizada, threshold=0.5, alpha=1.0)
+			else:
+				return Response("Algoritmo no reconocido", status=status.HTTP_400_BAD_REQUEST)
+
+			# Muestra de información
+			print(mesh_3d_info(mesh))
+
+			# Visualización
+			plot_3d_mesh(mesh, output)
+
+			return Response(
+				{
+					"message": "Nube de puntos procesada y malla generada.",
+					"output": output,
+					#"mesh_info": print_3d_mesh_info(mesh),
+					"mesh": mesh,
+				},
+				status=status.HTTP_201_CREATED,
+			)
+			# return Response("Nube de puntos visualizada correctamente", status=status.HTTP_200_OK)
+		except Exception as e:
+			return Response("Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST)
+
+	def get(self, request):
+
+		# Path a la nube de puntos
+		file_path = request.GET.get("filepath") or None
+		point_clouds = []
+
+		#Si se especifica un archivo, el programa procede a cargarlo y visualizarlo
+		if file_path:
+			try:
+				print(f"Cargando nube de punto desde: {file_path}")
+
+				# Carga de información nube de puntos, salta la primera fila (contiene metadatos)
+				point_cloud = {
+					"name": file_path,
+					"point_cloud": load_point_cloud(file_path),	
+				}
+
+				point_clouds.append(point_cloud)
+
+				# Respuesta HTTP
+				return Response(
+					{
+						"message": "Nube de puntos leída correctamente",
+						"point_clouds": point_clouds,
+					},
+					#Retornar la nube de puntos
+					status=status.HTTP_200_OK,
+				)
+			except Exception as e: # Excepción en caso de error
+				return Response(
+					"Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST
+				)
+		else:  # Caso contrario, se muestran todos los archivos de nube de puntos disponibles en el directorio
+			try:
+				routes = {
+					key: value for key, value in os.environ.items() if "FARO" in key and is_point_cloud(value)
+				}
+				# Se aplica la carga, muestra de datos y visualización a cada archivo
+				for key, value in routes.items():
+					print(f"{key}: {value}")
+					point_cloud = {
+						#"key": key,
+						"value": value,
+						"point_cloud": load_point_cloud(value),
+					}
+
+					#cloud = generate_cloud(point_cloud) # En duda si realmente es necesario para el frontend
+
+				return Response(
+					{
+						"message": "Nubes de puntos leídos correctamente",
+						"point_clouds": point_clouds,
+					},
+					status=status.HTTP_200_OK,
+				)
+			except Exception as e: # Excepción en caso de error
+				return Response(
+					"Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST
+				)
+
+
+class Mesh3DView(APIView):
+	def get(self, request):
+		# Path a la malla 3D
+		file_path = request.GET.get("filepath") or None
+		meshs = []
+
+		# Si se especifica un archivo, el programa procede a cargarlo y visualizarlo
+		if file_path:
+			try:
+				print(f"Cargando malla 3D desde: {file_path}")
+
+				# Carga de información malla 3D
+				mesh = {
+					"name": file_path,
+					"meshs": load_3d_mesh(file_path),
+				}
+
+				meshs.append(mesh)
+
+				# Respuesta HTTP
+				return Response(
+					{
+						"message": "Malla 3D leída correctamente",
+						"meshs": meshs,
+					},
+					status=status.HTTP_200_OK,
+				)
+			except Exception as e: # Excepción en caso de error
+				return Response(
+					"Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST
+				)
+		else:  # Caso contrario, se muestran todos los archivos de malla 3D disponibles en el directorio
+			try:
+				routes = {
+					key: value for key, value in os.environ.items() if "FARO" in key and is_3d_mesh(value)
+				}
+				# Se cargan nubes de punto al array
+				for key, value in routes.items():
+					mesh = {
+						#"key": key,
+						"value": value,
+						"mesh": load_3d_mesh(value),
+					}
+					meshs.append(mesh)
+				return Response(
+					{
+						"message": "Archivos de malla 3D leídos correctamente",
+						"meshs": meshs,
+					},
+					status=status.HTTP_200_OK,
+				)
+			except Exception as e:
+				return Response(
+					"Exception: " + str(e), status=status.HTTP_400_BAD_REQUEST
+				)
+			
