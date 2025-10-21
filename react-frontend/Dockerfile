@@ -1,26 +1,21 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
-
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
-# Stage 2: Production image (dev env, no nginx)
 FROM node:20-alpine
 
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Copy package files
+COPY package*.json ./
 
-COPY --from=builder /app/dist ./dist
+# Install dependencies
+RUN npm ci --only=production=false
+
+# Copy source code
 COPY . .
 
 EXPOSE 5173
 
-#CMD ["npm", "run", "start"]
-CMD ["npm", "run", "dev"]
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
