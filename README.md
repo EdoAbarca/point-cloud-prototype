@@ -41,4 +41,125 @@ En cine y videojuegos, las nubes de puntos se emplean para capturar escenarios r
 - **Monitoreo de movimiento:** En kinesiología y rehabilitación, las nubes de puntos se emplean para capturar movimientos corporales y analizar patrones de marcha o ejercicios terapéuticos.
 
 ## Detalle técnico
-Este prototipo usa Python como tecnología principal, con apoyo de Open3d, numpy, pandas y Matplotlib para efectos de lectura, análisis y muestreo de puntos de nube.
+- Arquitectura: Monolítica de 2 capas.
+- Frontend: Vite + React js + SWC + Tailwind CSS + Three.js
+- Backend: Django + RestFramework + Open3D
+
+## Cómo inicializar y utilizar la aplicación
+
+### Prerrequisitos
+- Docker
+- Docker Compose
+- Make (opcional, pero recomendado)
+
+### Métodos de ejecución
+
+#### Opción 1: Usando Makefile (Recomendado)
+
+El proyecto incluye un Makefile con comandos útiles para gestionar los servicios Docker. Para ver todos los comandos disponibles:
+
+```bash
+make help
+```
+
+**Comandos principales:**
+
+```bash
+# Iniciar la aplicación (construye e inicia los servicios)
+make up
+
+# Iniciar en segundo plano
+make up-d
+
+# Detener los servicios
+make stop
+
+# Reiniciar los servicios
+make restart
+
+# Eliminar completamente los servicios
+make down
+
+# Limpiar todo (servicios, volúmenes, imágenes)
+make clean
+
+# Ver logs en tiempo real
+make logs-f
+
+# Ver estado de los contenedores
+make status
+```
+
+#### Opción 2: Usando Docker Compose directamente
+
+```bash
+# Iniciar los servicios
+docker compose up --build
+
+# Iniciar en segundo plano
+docker compose up --build -d
+
+# Detener los servicios
+docker compose stop
+
+# Eliminar los servicios
+docker compose down
+```
+
+### Acceso a la aplicación
+
+Una vez que los servicios estén ejecutándose:
+
+- **Frontend (React)**: http://localhost:5173
+- **Backend (Django API)**: http://localhost:8000
+- **Admin Django**: http://localhost:8000/admin (si está configurado)
+
+### Comandos útiles de desarrollo
+
+```bash
+# Ver logs del backend solamente
+make logs-backend
+
+# Ver logs del frontend solamente
+make logs-frontend
+
+# Acceder al contenedor del backend
+make shell-backend
+
+# Acceder al contenedor del frontend
+make shell-frontend
+
+# Reconstruir las imágenes
+make build
+```
+
+### Estructura de la aplicación
+
+La aplicación está containerizada con Docker Compose y consta de:
+
+- **Frontend**: Servidor de desarrollo Vite con React en puerto 5173
+- **Backend**: Servidor de desarrollo Django en puerto 8000
+- **Volúmenes**: Configurados para desarrollo con hot-reload
+
+### Solución de problemas
+
+Si encuentras problemas:
+
+1. **Limpiar completamente y reiniciar**:
+   ```bash
+   make clean
+   make up
+   ```
+
+2. **Ver logs para diagnosticar**:
+   ```bash
+   make logs-f
+   ```
+
+3. **Verificar estado de contenedores**:
+   ```bash
+   make status
+   ```
+
+
+
