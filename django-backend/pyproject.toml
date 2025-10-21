@@ -1,0 +1,37 @@
+[project]
+name = "point-cloud-prototype"
+version = "1.0.0"
+description = "Point Cloud Prototype - A full-stack web application for visualizing .pts files and build 3d meshes out of it."
+requires-python = ">=3.8, <3.11"
+
+authors = [
+    { name = "Eduardo", email = "eduardo.abarca.c@usach.cl" }
+]
+
+# Core dependencies for the application to run
+dependencies = [
+    "Django~=4.2.0",
+    "djangorestframework~=3.14",
+    "open3d~=0.18.0", # Open3D only supports Python <=3.10. Remove or downgrade Python if needed.
+    "numpy~=1.24.0",
+    "matplotlib~=3.7.0",
+    "python-dotenv~=1.0.0",
+    "django-cors-headers~=4.3.1",
+    # Add all other required packages (e.g., database drivers, helpers)
+    "psycopg2-binary~=2.9",
+    "gunicorn~=21.2.0", # Used as the production server
+    "whitenoise~=6.6",
+]
+
+[project.optional-dependencies]
+# Dependencies only needed for local development (e.g., testing, linting)
+dev = [
+    "black",
+    "ipython",
+    "pytest-django",
+]
+
+
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
