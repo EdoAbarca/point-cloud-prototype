@@ -29,6 +29,23 @@ services:
     networks:
       - app-network
 
+  jenkins:
+    image: jenkins/jenkins:lts
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/workspace
+    environment:
+      - JENKINS_OPTS=--prefix=/jenkins
+    networks:
+      - app-network
+    restart: unless-stopped
+
   # Uncomment and configure for production database
   # db:
   #   image: postgres:13
@@ -44,6 +61,7 @@ services:
 networks:
   app-network:
 
-# Uncomment for persistent database storage
-# volumes:
-#   db-data:
+volumes:
+  jenkins_home:
+  # Uncomment for persistent database storage
+  # db-data:
