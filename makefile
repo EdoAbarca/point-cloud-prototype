@@ -1,7 +1,7 @@
 # Makefile para Point Cloud Prototype
 # Comandos de gestión de Docker Compose
 
-.PHONY: help build up start restart stop down clean logs status
+.PHONY: help build up start restart stop down clean logs status test lint jenkins
 
 # Ayuda - muestra todos los comandos disponibles
 help:
@@ -14,6 +14,12 @@ help:
 	@echo "  stop          - Detiene los servicios sin eliminarlos"
 	@echo "  down          - Detiene y elimina los servicios y redes"
 	@echo "  clean         - Elimina servicios, redes, volúmenes e imágenes"
+	@echo "  test          - Ejecuta todas las pruebas (backend y frontend)"
+	@echo "  test-backend  - Ejecuta solo las pruebas del backend"
+	@echo "  test-frontend - Ejecuta solo las pruebas del frontend"
+	@echo "  lint          - Ejecuta linting en el código (backend y frontend)"
+	@echo "  lint-backend  - Ejecuta linting solo en el backend"
+	@echo "  lint-frontend - Ejecuta linting solo en el frontend"
 	@echo "  logs          - Muestra los logs de todos los servicios"
 	@echo "  logs-f        - Muestra los logs en tiempo real"
 	@echo "  logs-backend  - Muestra solo los logs del backend"
@@ -21,6 +27,13 @@ help:
 	@echo "  status        - Muestra el estado de los contenedores"
 	@echo "  shell-backend - Abre una shell en el contenedor del backend"
 	@echo "  shell-frontend- Abre una shell en el contenedor del frontend"
+	@echo ""
+	@echo "Jenkins:"
+	@echo "  jenkins-up    - Inicia solo el servicio de Jenkins"
+	@echo "  jenkins-stop  - Detiene el servicio de Jenkins"
+	@echo "  jenkins-logs  - Muestra los logs de Jenkins"
+	@echo "  jenkins-pass  - Muestra la contraseña inicial de Jenkins"
+	@echo "  jenkins-shell - Abre una shell en el contenedor de Jenkins"
 	@echo ""
 
 # Construir las imágenes Docker
@@ -103,6 +116,78 @@ shell-backend:
 shell-frontend:
 	@echo "🐚 Abriendo shell en el contenedor del frontend..."
 	docker compose exec frontend sh
+
+# Ejecutar todas las pruebas
+test:
+	@echo "🧪 Ejecutando todas las pruebas..."
+	@$(MAKE) test-backend
+	@$(MAKE) test-frontend
+
+# Ejecutar pruebas del backend
+test-backend:
+	@echo "🧪 Ejecutando pruebas del backend Django..."
+	docker compose exec backend python manage.py test
+
+# Ejecutar pruebas del frontend (placeholder - agregar cuando se implementen)
+test-frontend:
+	@echo "🧪 Ejecutando pruebas del frontend..."
+	@echo "⚠️  Las pruebas del frontend no están implementadas aún"
+	@echo "💡 Para agregar pruebas, considera usar Vitest o Jest"
+
+# Ejecutar linting en todo el código
+lint:
+	@echo "🔍 Ejecutando linting en todo el código..."
+	@$(MAKE) lint-backend
+	@$(MAKE) lint-frontend
+
+# Ejecutar linting del backend
+lint-backend:
+	@echo "🔍 Ejecutando linting del backend..."
+	@echo "⚠️  Linting del backend no configurado aún"
+	@echo "💡 Para agregar linting, considera usar flake8, black o ruff"
+
+# Ejecutar linting del frontend
+lint-frontend:
+	@echo "🔍 Ejecutando linting del frontend..."
+	docker compose exec frontend npm run lint
+
+# ============================================
+# Comandos específicos de Jenkins
+# ============================================
+
+# Iniciar solo Jenkins
+jenkins-up:
+	@echo "🚀 Iniciando servicio de Jenkins..."
+	docker compose up -d jenkins
+	@echo "⏳ Esperando a que Jenkins esté listo..."
+	@sleep 10
+	@echo "✅ Jenkins iniciado en http://localhost:8080"
+	@echo "💡 Usa 'make jenkins-pass' para obtener la contraseña inicial"
+
+# Detener Jenkins
+jenkins-stop:
+	@echo "⏹️ Deteniendo servicio de Jenkins..."
+	docker compose stop jenkins
+
+# Ver logs de Jenkins
+jenkins-logs:
+	@echo "📋 Mostrando logs de Jenkins..."
+	docker compose logs -f jenkins
+
+# Obtener contraseña inicial de Jenkins
+jenkins-pass:
+	@echo "🔑 Contraseña inicial de Jenkins:"
+	@docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword 2>/dev/null || echo "⚠️ Jenkins no está ejecutándose o ya fue configurado"
+
+# Abrir shell en Jenkins
+jenkins-shell:
+	@echo "🐚 Abriendo shell en el contenedor de Jenkins..."
+	docker compose exec jenkins bash
+
+# Reiniciar Jenkins
+jenkins-restart:
+	@echo "🔄 Reiniciando Jenkins..."
+	docker compose restart jenkins
 
 # Comando por defecto
 .DEFAULT_GOAL := help
