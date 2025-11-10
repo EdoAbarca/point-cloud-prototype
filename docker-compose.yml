@@ -30,7 +30,9 @@ services:
       - app-network
 
   jenkins:
-    image: jenkins/jenkins:lts
+    build:
+      context: jenkins
+      dockerfile: Dockerfile
     privileged: true
     user: root
     ports:

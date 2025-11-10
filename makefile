@@ -29,7 +29,8 @@ help:
 	@echo "  shell-frontend- Abre una shell en el contenedor del frontend"
 	@echo ""
 	@echo "Jenkins:"
-	@echo "  jenkins-up      - Inicia solo el servicio de Jenkins"
+	@echo "  jenkins-up      - Inicia solo el servicio de Jenkins (construye si es necesario)"
+	@echo "  jenkins-rebuild - Reconstruye la imagen personalizada de Jenkins desde cero"
 	@echo "  jenkins-stop    - Detiene el servicio de Jenkins"
 	@echo "  jenkins-logs    - Muestra los logs de Jenkins"
 	@echo "  jenkins-pass    - Muestra la contraseña inicial de Jenkins"
@@ -160,10 +161,18 @@ lint-frontend:
 # Comandos específicos de Jenkins
 # ============================================
 
-# Iniciar solo Jenkins
+# Reconstruir imagen personalizada de Jenkins
+jenkins-rebuild:
+	@echo "🔨 Reconstruyendo imagen personalizada de Jenkins..."
+	docker compose build jenkins --no-cache
+	@echo "✅ Imagen de Jenkins reconstruida con Docker CLI y Make"
+	@echo "💡 Usa 'make jenkins-up' para reiniciar con la nueva imagen"
+
+# Iniciar solo Jenkins (construye la imagen si no existe)
 jenkins-up:
 	@echo "🚀 Iniciando servicio de Jenkins..."
-	docker compose up -d jenkins
+	@echo "📦 Construyendo imagen personalizada si es necesario..."
+	docker compose up -d --build jenkins
 	@echo "⏳ Esperando a que Jenkins esté listo..."
 	@sleep 10
 	@echo "✅ Jenkins iniciado en http://localhost:8080"
