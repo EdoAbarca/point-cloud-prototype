@@ -33,8 +33,8 @@ pipeline {
         // Deshabilitar checkout automático
         skipDefaultCheckout(false)
         
-        // Timestamps en logs
-        timestamps()
+        // Timestamps se pueden habilitar a nivel de Jenkins en la configuración del job
+        // o usando el plugin Timestamper en la configuración global
     }
     
     stages {
