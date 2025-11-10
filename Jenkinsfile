@@ -319,7 +319,7 @@ pipeline {
                                 },
                                 {
                                     "name": "Build",
-                                    "value": "#${BUILD_NUMBER}",
+                                    "value": "#${env.BUILD_NUMBER}",
                                     "inline": true
                                 },
                                 {
@@ -339,11 +339,11 @@ pipeline {
                                 },
                                 {
                                     "name": "URL",
-                                    "value": "[Ver build](${BUILD_URL})",
+                                    "value": "[Ver build](${env.BUILD_URL})",
                                     "inline": true
                                 }
                             ],
-                            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                            "timestamp": "\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
                         }]
                     }'
                 """
@@ -380,7 +380,7 @@ pipeline {
                                 },
                                 {
                                     "name": "Build",
-                                    "value": "#${BUILD_NUMBER}",
+                                    "value": "#${env.BUILD_NUMBER}",
                                     "inline": true
                                 },
                                 {
@@ -395,11 +395,11 @@ pipeline {
                                 },
                                 {
                                     "name": "URL",
-                                    "value": "[Ver logs](${BUILD_URL}console)",
+                                    "value": "[Ver logs](${env.BUILD_URL}console)",
                                     "inline": false
                                 }
                             ],
-                            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                            "timestamp": "\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
                         }]
                     }'
                 """
@@ -432,7 +432,7 @@ pipeline {
                                 },
                                 {
                                     "name": "Build",
-                                    "value": "#${BUILD_NUMBER}",
+                                    "value": "#${env.BUILD_NUMBER}",
                                     "inline": true
                                 },
                                 {
@@ -447,11 +447,11 @@ pipeline {
                                 },
                                 {
                                     "name": "URL",
-                                    "value": "[Ver detalles](${BUILD_URL})",
+                                    "value": "[Ver detalles](${env.BUILD_URL})",
                                     "inline": false
                                 }
                             ],
-                            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                            "timestamp": "\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
                         }]
                     }'
                 """
