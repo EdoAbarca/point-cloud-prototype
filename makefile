@@ -29,11 +29,16 @@ help:
 	@echo "  shell-frontend- Abre una shell en el contenedor del frontend"
 	@echo ""
 	@echo "Jenkins:"
-	@echo "  jenkins-up    - Inicia solo el servicio de Jenkins"
-	@echo "  jenkins-stop  - Detiene el servicio de Jenkins"
-	@echo "  jenkins-logs  - Muestra los logs de Jenkins"
-	@echo "  jenkins-pass  - Muestra la contraseña inicial de Jenkins"
-	@echo "  jenkins-shell - Abre una shell en el contenedor de Jenkins"
+	@echo "  jenkins-up      - Inicia solo el servicio de Jenkins"
+	@echo "  jenkins-stop    - Detiene el servicio de Jenkins"
+	@echo "  jenkins-logs    - Muestra los logs de Jenkins"
+	@echo "  jenkins-pass    - Muestra la contraseña inicial de Jenkins"
+	@echo "  jenkins-shell   - Abre una shell en el contenedor de Jenkins"
+	@echo "  jenkins-setup   - Configura Jenkins automáticamente (CLI, plugins, jobs)"
+	@echo "  jenkins-cli     - Descarga el Jenkins CLI jar"
+	@echo "  jenkins-create-job - Crea el pipeline job automáticamente"
+	@echo "  jenkins-build   - Ejecuta el build del pipeline"
+	@echo "  jenkins-status  - Muestra el estado del último build"
 	@echo ""
 
 # Construir las imágenes Docker
@@ -188,6 +193,25 @@ jenkins-shell:
 jenkins-restart:
 	@echo "🔄 Reiniciando Jenkins..."
 	docker compose restart jenkins
+
+# Descargar Jenkins CLI
+jenkins-cli:
+	@echo "📥 Descargando Jenkins CLI..."
+	@mkdir -p .jenkins
+	@curl -s -o .jenkins/jenkins-cli.jar http://localhost:8080/jnlpJars/jenkins-cli.jar
+	@echo "✅ Jenkins CLI descargado en .jenkins/jenkins-cli.jar"
+
+# Ejecutar build del pipeline
+jenkins-build:
+	@echo "🚀 Ejecutando build del pipeline..."
+	@if [ ! -f .jenkins/jenkins-cli.jar ]; then $(MAKE) jenkins-cli; fi
+	@java -jar .jenkins/jenkins-cli.jar -s http://localhost:8080/ build point-cloud-prototype -f -v
+
+# Ver estado del último build
+jenkins-status:
+	@echo "📊 Estado del último build:"
+	@if [ ! -f .jenkins/jenkins-cli.jar ]; then $(MAKE) jenkins-cli; fi
+	@java -jar .jenkins/jenkins-cli.jar -s http://localhost:8080/ get-job point-cloud-prototype | grep -A 5 "lastBuild" || echo "⚠️ No hay builds disponibles"
 
 # Comando por defecto
 .DEFAULT_GOAL := help

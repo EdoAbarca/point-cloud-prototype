@@ -18,6 +18,9 @@ pipeline {
         COMPOSE_PROJECT_NAME = 'point-cloud-prototype'
         DOCKER_BUILDKIT = '1'
         COMPOSE_DOCKER_CLI_BUILD = '1'
+        
+        // Discord Webhook para notificaciones (cargado desde Jenkins credentials)
+        DISCORD_WEBHOOK = credentials('DISCORD_WEBHOOK')
     }
     
     options {
@@ -292,10 +295,58 @@ pipeline {
             echo '✅ ¡Pipeline ejecutado exitosamente!'
             
             script {
-                // En un entorno real, aquí se podrían enviar notificaciones de éxito
                 def buildDuration = currentBuild.durationString
+                def gitCommit = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                def gitBranch = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                
                 echo "⏱️ Duración del build: ${buildDuration}"
                 echo "🎉 Todas las etapas completadas correctamente"
+                
+                // Enviar notificación de éxito a Discord
+                sh """
+                    curl -X POST '${DISCORD_WEBHOOK}' \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "embeds": [{
+                            "title": "✅ Build Exitoso",
+                            "description": "El pipeline se completó correctamente",
+                            "color": 3066993,
+                            "fields": [
+                                {
+                                    "name": "Proyecto",
+                                    "value": "Point Cloud Prototype",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Build",
+                                    "value": "#${BUILD_NUMBER}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Rama",
+                                    "value": "${gitBranch}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Commit",
+                                    "value": "`${gitCommit}`",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Duración",
+                                    "value": "${buildDuration}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "URL",
+                                    "value": "[Ver build](${BUILD_URL})",
+                                    "inline": true
+                                }
+                            ],
+                            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                        }]
+                    }'
+                """
             }
         }
         
@@ -303,22 +354,108 @@ pipeline {
             echo '❌ Pipeline falló'
             
             script {
-                // Obtener información adicional sobre el fallo
                 def buildNumber = env.BUILD_NUMBER
                 def buildUrl = env.BUILD_URL
+                def gitCommit = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                def gitBranch = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
                 
                 echo "🔍 Build #${buildNumber} falló"
                 echo "🔗 URL: ${buildUrl}"
                 echo "💡 Revisa los logs anteriores para más detalles"
                 
-                // En un entorno real, aquí se enviarían notificaciones de fallo
-                // Por ejemplo, email, Slack, etc.
+                // Enviar notificación de fallo a Discord
+                sh """
+                    curl -X POST '${DISCORD_WEBHOOK}' \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "embeds": [{
+                            "title": "❌ Build Fallido",
+                            "description": "El pipeline falló durante la ejecución",
+                            "color": 15158332,
+                            "fields": [
+                                {
+                                    "name": "Proyecto",
+                                    "value": "Point Cloud Prototype",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Build",
+                                    "value": "#${BUILD_NUMBER}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Rama",
+                                    "value": "${gitBranch}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Commit",
+                                    "value": "`${gitCommit}`",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "URL",
+                                    "value": "[Ver logs](${BUILD_URL}console)",
+                                    "inline": false
+                                }
+                            ],
+                            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                        }]
+                    }'
+                """
             }
         }
         
         unstable {
             echo '⚠️ Pipeline completado con advertencias'
-            echo '💡 Revisa las etapas de linting y testing para más detalles'
+            
+            script {
+                def gitCommit = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                def gitBranch = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                
+                echo '💡 Revisa las etapas de linting y testing para más detalles'
+                
+                // Enviar notificación de advertencia a Discord
+                sh """
+                    curl -X POST '${DISCORD_WEBHOOK}' \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "embeds": [{
+                            "title": "⚠️ Build Inestable",
+                            "description": "El pipeline se completó con advertencias",
+                            "color": 16776960,
+                            "fields": [
+                                {
+                                    "name": "Proyecto",
+                                    "value": "Point Cloud Prototype",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Build",
+                                    "value": "#${BUILD_NUMBER}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Rama",
+                                    "value": "${gitBranch}",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "Commit",
+                                    "value": "`${gitCommit}`",
+                                    "inline": true
+                                },
+                                {
+                                    "name": "URL",
+                                    "value": "[Ver detalles](${BUILD_URL})",
+                                    "inline": false
+                                }
+                            ],
+                            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                        }]
+                    }'
+                """
+            }
         }
     }
 }

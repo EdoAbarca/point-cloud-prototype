@@ -1,2 +1,6 @@
 figures/
 docs/
+
+# Jenkins
+.jenkins/
+jenkins-cli.jar
