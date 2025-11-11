@@ -1,7 +1,7 @@
 # Makefile para Point Cloud Prototype
 # Comandos de gestión de Docker Compose
 
-.PHONY: help build up start restart stop down down-app clean logs status test lint jenkins
+.PHONY: help build build-app up up-app up-d start start-d restart stop down down-app clean logs logs-f logs-backend logs-frontend status status-app test lint jenkins shell-backend shell-frontend test-backend test-frontend lint-backend lint-frontend jenkins-up jenkins-rebuild jenkins-stop jenkins-logs jenkins-pass jenkins-shell jenkins-restart jenkins-cli jenkins-build jenkins-status
 
 # Ayuda - muestra todos los comandos disponibles
 help:
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "  build         - Construye las imágenes Docker sin iniciar los servicios"
 	@echo "  up            - Inicia los servicios con construcción automática"
+	@echo "  up-app        - Inicia solo los servicios de la aplicación (backend y frontend) en segundo plano"
 	@echo "  start         - Inicia los servicios (sin reconstruir)"
 	@echo "  restart       - Reinicia todos los servicios"
 	@echo "  stop          - Detiene los servicios sin eliminarlos"
@@ -48,6 +49,7 @@ build:
 	@echo "🔨 Construyendo imágenes Docker..."
 	docker compose build
 
+# Construir solo las imágenes de la aplicación (backend y frontend)
 build-app:
 	@echo "🔨 Construyendo imágenes Docker de la aplicación (backend y frontend)..."
 	docker compose build backend frontend
@@ -56,6 +58,13 @@ build-app:
 up:
 	@echo "🚀 Iniciando servicios con construcción automática..."
 	docker compose up --build
+
+# Iniciar solo servicios de la aplicación (backend y frontend)
+
+up-app:
+	@echo "🚀 Iniciando servicios de la aplicación (backend y frontend) en segundo plano..."
+	docker compose up -d backend frontend
+
 
 # Iniciar servicios en segundo plano
 up-d:

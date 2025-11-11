@@ -103,7 +103,7 @@ pipeline {
                         script {
                             try {
                                 // Iniciar servicios en background para las pruebas
-                                sh 'make up-d'
+                                sh 'make up-app'
                                 
                                 // Esperar a que los servicios estén listos
                                 sh '''
