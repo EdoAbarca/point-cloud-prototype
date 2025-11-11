@@ -1,0 +1,57 @@
+# Docker Compose configuration for CI/CD (Jenkins)
+# This file extends docker-compose.yml but removes volume mounts
+# that would override built container contents with host directories
+
+services:
+  frontend:
+    build:
+      context: react-frontend
+      dockerfile: Dockerfile
+    # NO volume mounts - use built container as-is
+    ports:
+      - "5173:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=test
+    env_file:
+      - react-frontend/.env
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: django-backend
+      dockerfile: Dockerfile
+    # NO volume mounts - use built container as-is
+    ports:
+      - "8000:8000"
+    env_file:
+      - django-backend/.env
+    networks:
+      - app-network
+
+  jenkins:
+    build:
+      context: jenkins
+      dockerfile: Dockerfile
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/workspace
+    environment:
+      - JENKINS_OPTS=--prefix=/jenkins
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  jenkins_home:

@@ -76,7 +76,7 @@ pipeline {
                 // Limpiar contenedores previos si existen
                 sh '''
                     echo "🧹 Limpiando contenedores previos..."
-                    make down-app || true
+                    make down-ci || true
                     docker system prune -f || true
                 '''
                 
@@ -99,16 +99,16 @@ pipeline {
                     fi
                 '''
                 
-                // Construir las imágenes usando el Makefile
+                // Construir las imágenes usando el Makefile con configuración CI
                 sh '''
-                    echo "🏗️ Construyendo imágenes con make build-app..."
-                    make build-app
+                    echo "🏗️ Construyendo imágenes en modo CI (sin volume mounts)..."
+                    make build-ci
                 '''
                 
                 // Iniciar los servicios después de construir
                 sh '''
-                    echo "🚀 Iniciando servicios de aplicación..."
-                    make up-app
+                    echo "🚀 Iniciando servicios en modo CI..."
+                    make up-ci
                 '''
                 
                 // Verificar que las imágenes se crearon y los servicios están corriendo
@@ -117,8 +117,11 @@ pipeline {
                     docker images | grep point-cloud-prototype
                     
                     echo "📊 Verificando que los servicios iniciaron correctamente..."
-                    sleep 5
-                    docker compose ps backend frontend
+                    sleep 10
+                    make status-ci
+                    
+                    echo "📋 Logs iniciales de los servicios..."
+                    make logs-ci
                 '''
             }
         }
@@ -133,18 +136,18 @@ pipeline {
                             try {
                                 // Los servicios ya están corriendo desde el Build stage
                                 sh '''
-                                    echo "🔍 Verificando estado de los servicios..."
-                                    docker compose ps backend frontend
+                                    echo "🔍 Verificando estado de los servicios CI..."
+                                    make status-ci
                                 '''
                                 
-                                // Ejecutar pruebas del backend
-                                sh 'make test-backend'
+                                // Ejecutar pruebas del backend en modo CI
+                                sh 'make test-backend-ci'
                                 
                             } catch (Exception e) {
                                 echo "❌ Error en las pruebas del backend: ${e.getMessage()}"
                                 
                                 // Mostrar logs para debugging
-                                sh 'make logs-backend || true'
+                                sh 'make logs-ci || true'
                                 
                                 throw e
                             }
@@ -301,13 +304,13 @@ pipeline {
             // Limpiar recursos independientemente del resultado
             sh '''
                 echo "📋 Mostrando logs finales..."
-                make logs || true
+                make logs-ci || true
                 
                 echo "📊 Estado final de contenedores..."
-                make status || true
+                make status-ci || true
                 
-                echo "🛑 Deteniendo servicios de aplicación (manteniendo Jenkins)..."
-                make down-app || true
+                echo "🛑 Deteniendo servicios CI (manteniendo Jenkins)..."
+                make down-ci || true
                 
                 echo "🧹 Limpieza de sistema Docker..."
                 docker system prune -f || true
@@ -332,6 +335,9 @@ pipeline {
                 
                 echo "⏱️ Duración del build: ${buildDuration}"
                 echo "🎉 Todas las etapas completadas correctamente"
+                
+                // Generar timestamp para Discord
+                def timestamp = sh(returnStdout: true, script: 'date -u +%Y-%m-%dT%H:%M:%S.000Z').trim()
                 
                 // Enviar notificación de éxito a Discord
                 sh """
@@ -360,7 +366,7 @@ pipeline {
                                 },
                                 {
                                     "name": "Commit",
-                                    "value": "`${gitCommit}`",
+                                    "value": "${gitCommit}",
                                     "inline": true
                                 },
                                 {
@@ -374,7 +380,7 @@ pipeline {
                                     "inline": true
                                 }
                             ],
-                            "timestamp": "\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                            "timestamp": "${timestamp}"
                         }]
                     }'
                 """
@@ -400,6 +406,9 @@ pipeline {
                 echo "🔍 Build #${buildNumber} falló"
                 echo "🔗 URL: ${buildUrl}"
                 echo "💡 Revisa los logs anteriores para más detalles"
+                
+                // Generar timestamp para Discord
+                def timestamp = sh(returnStdout: true, script: 'date -u +%Y-%m-%dT%H:%M:%S.000Z').trim()
                 
                 // Enviar notificación de fallo a Discord
                 sh """
@@ -428,7 +437,7 @@ pipeline {
                                 },
                                 {
                                     "name": "Commit",
-                                    "value": "`${gitCommit}`",
+                                    "value": "${gitCommit}",
                                     "inline": true
                                 },
                                 {
@@ -437,7 +446,7 @@ pipeline {
                                     "inline": false
                                 }
                             ],
-                            "timestamp": "\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                            "timestamp": "${timestamp}"
                         }]
                     }'
                 """
@@ -460,6 +469,9 @@ pipeline {
                 def buildUrl = env.BUILD_URL ?: "${env.JENKINS_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
                 
                 echo '💡 Revisa las etapas de linting y testing para más detalles'
+                
+                // Generar timestamp para Discord
+                def timestamp = sh(returnStdout: true, script: 'date -u +%Y-%m-%dT%H:%M:%S.000Z').trim()
                 
                 // Enviar notificación de advertencia a Discord
                 sh """
@@ -488,7 +500,7 @@ pipeline {
                                 },
                                 {
                                     "name": "Commit",
-                                    "value": "`${gitCommit}`",
+                                    "value": "${gitCommit}",
                                     "inline": true
                                 },
                                 {
@@ -497,7 +509,7 @@ pipeline {
                                     "inline": false
                                 }
                             ],
-                            "timestamp": "\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+                            "timestamp": "${timestamp}"
                         }]
                     }'
                 """

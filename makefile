@@ -102,6 +102,41 @@ down-app:
 	docker compose stop backend frontend
 	docker compose rm -f backend frontend
 
+# ============================================
+# CI/CD Targets (usando docker-compose.ci.yml)
+# ============================================
+
+# Construir imágenes para CI/CD (sin volume mounts)
+build-ci:
+	@echo "🔨 Construyendo imágenes Docker para CI/CD..."
+	docker compose -f docker-compose.ci.yml build backend frontend
+
+# Iniciar servicios para CI/CD
+up-ci:
+	@echo "🚀 Iniciando servicios en modo CI/CD..."
+	docker compose -f docker-compose.ci.yml up -d backend frontend
+
+# Detener servicios CI/CD
+down-ci:
+	@echo "🛑 Deteniendo servicios CI/CD..."
+	docker compose -f docker-compose.ci.yml stop backend frontend
+	docker compose -f docker-compose.ci.yml rm -f backend frontend
+
+# Ejecutar tests del backend en modo CI
+test-backend-ci:
+	@echo "🧪 Ejecutando pruebas del backend en CI..."
+	docker compose -f docker-compose.ci.yml exec -T backend python manage.py test
+
+# Ver logs en modo CI
+logs-ci:
+	@echo "📋 Mostrando logs CI..."
+	docker compose -f docker-compose.ci.yml logs
+
+# Ver estado de servicios CI
+status-ci:
+	@echo "📊 Estado de servicios CI:"
+	docker compose -f docker-compose.ci.yml ps
+
 # Limpiar completamente (servicios, redes, volúmenes e imágenes)
 clean:
 	@echo "🧹 Limpiando completamente el entorno..."
