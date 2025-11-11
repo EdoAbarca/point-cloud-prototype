@@ -1,7 +1,7 @@
 # Makefile para Point Cloud Prototype
 # Comandos de gestión de Docker Compose
 
-.PHONY: help build up start restart stop down clean logs status test lint jenkins
+.PHONY: help build up start restart stop down down-app clean logs status test lint jenkins
 
 # Ayuda - muestra todos los comandos disponibles
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  restart       - Reinicia todos los servicios"
 	@echo "  stop          - Detiene los servicios sin eliminarlos"
 	@echo "  down          - Detiene y elimina los servicios y redes"
+	@echo "  down-app      - Detiene solo backend/frontend (mantiene Jenkins)"
 	@echo "  clean         - Elimina servicios, redes, volúmenes e imágenes"
 	@echo "  test          - Ejecuta todas las pruebas (backend y frontend)"
 	@echo "  test-backend  - Ejecuta solo las pruebas del backend"
@@ -81,6 +82,12 @@ stop:
 down:
 	@echo "🛑 Deteniendo y eliminando servicios..."
 	docker compose down
+
+# Detener solo servicios de aplicación (backend y frontend), mantener Jenkins
+down-app:
+	@echo "🛑 Deteniendo servicios de aplicación (manteniendo Jenkins)..."
+	docker compose stop backend frontend
+	docker compose rm -f backend frontend
 
 # Limpiar completamente (servicios, redes, volúmenes e imágenes)
 clean:
@@ -164,6 +171,8 @@ lint-frontend:
 # Reconstruir imagen personalizada de Jenkins
 jenkins-rebuild:
 	@echo "🔨 Reconstruyendo imagen personalizada de Jenkins..."
+	@echo "Destruir contenedor existente de Jenkins si lo hay..."
+	docker compose rm -fs -v jenkins
 	docker compose build jenkins --no-cache
 	@echo "✅ Imagen de Jenkins reconstruida con Docker CLI y Make"
 	@echo "💡 Usa 'make jenkins-up' para reiniciar con la nueva imagen"

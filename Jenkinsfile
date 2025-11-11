@@ -76,7 +76,7 @@ pipeline {
                 // Limpiar contenedores previos si existen
                 sh '''
                     echo "🧹 Limpiando contenedores previos..."
-                    make down || true
+                    make down-app || true
                     docker system prune -f || true
                 '''
                 
@@ -283,8 +283,8 @@ pipeline {
                 echo "📊 Estado final de contenedores..."
                 make status || true
                 
-                echo "🛑 Deteniendo servicios..."
-                make down || true
+                echo "🛑 Deteniendo servicios de aplicación (manteniendo Jenkins)..."
+                make down-app || true
                 
                 echo "🧹 Limpieza de sistema Docker..."
                 docker system prune -f || true
