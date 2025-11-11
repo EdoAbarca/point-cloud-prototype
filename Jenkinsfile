@@ -339,6 +339,11 @@ pipeline {
                 // Generar timestamp para Discord
                 def timestamp = sh(returnStdout: true, script: 'date -u +%Y-%m-%dT%H:%M:%S.000Z').trim()
                 
+                // Ensure BUILD_URL is properly set
+                if (!buildUrl || buildUrl.contains('null')) {
+                    buildUrl = "http://localhost:8080/jenkins/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
+                }
+                
                 // Enviar notificación de éxito a Discord
                 sh """
                     curl -X POST '${DISCORD_WEBHOOK}' \
@@ -401,7 +406,8 @@ pipeline {
                 }
                 
                 // Construir URL del build manualmente si no está disponible
-                def buildUrl = env.BUILD_URL ?: "${env.JENKINS_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
+                def jenkinsUrl = env.JENKINS_URL ?: 'http://localhost:8080/jenkins/'
+                def buildUrl = env.BUILD_URL ?: "${jenkinsUrl}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
                 
                 echo "🔍 Build #${buildNumber} falló"
                 echo "🔗 URL: ${buildUrl}"
@@ -466,7 +472,8 @@ pipeline {
                 }
                 
                 // Construir URL del build manualmente si no está disponible
-                def buildUrl = env.BUILD_URL ?: "${env.JENKINS_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
+                def jenkinsUrl = env.JENKINS_URL ?: 'http://localhost:8080/jenkins/'
+                def buildUrl = env.BUILD_URL ?: "${jenkinsUrl}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
                 
                 echo '💡 Revisa las etapas de linting y testing para más detalles'
                 

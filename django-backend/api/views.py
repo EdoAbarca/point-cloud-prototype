@@ -11,7 +11,7 @@ load_dotenv()
 
 class HelloWorldView(APIView):
     def get(self, request):
-        return Response({"message": "Hello World!"}, status=status.HTTP_200_OK)
+        return Response({"message": "Hello, World!"}, status=status.HTTP_200_OK)
 
 
 #Clases a ser llamadas desde ThunderClient (Test backend)
