@@ -132,6 +132,16 @@ logs-ci:
 	@echo "📋 Mostrando logs CI..."
 	docker compose -f docker-compose.ci.yml logs
 
+# Ver logs del backend en modo CI
+logs-backend-ci:
+	@echo "📋 Mostrando logs del backend CI..."
+	docker compose -f docker-compose.ci.yml logs backend
+
+# Ver logs del frontend en modo CI
+logs-frontend-ci:
+	@echo "📋 Mostrando logs del frontend CI..."
+	docker compose -f docker-compose.ci.yml logs frontend
+
 # Ver estado de servicios CI
 status-ci:
 	@echo "📊 Estado de servicios CI:"

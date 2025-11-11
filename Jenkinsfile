@@ -230,22 +230,23 @@ pipeline {
                 script {
                     try {
                         // Verificar que ambos servicios están funcionando
+                        // Jenkins está en la misma red Docker, usar nombres de servicio en lugar de localhost
                         sh '''
                             echo "🔍 Verificando que los servicios estén respondiendo..."
                             
-                            # Verificar backend
-                            echo "🔧 Verificando backend en puerto 8000..."
-                            timeout 30 bash -c 'until curl -f http://localhost:8000/admin/; do sleep 2; done' || (
+                            # Verificar backend (usar nombre de servicio Docker)
+                            echo "🔧 Verificando backend en http://backend:8000..."
+                            timeout 30 bash -c 'until curl -f http://backend:8000/admin/; do sleep 2; done' || (
                                 echo "❌ Backend no responde"
-                                make logs-backend
+                                make logs-backend-ci
                                 exit 1
                             )
                             
-                            # Verificar frontend
-                            echo "⚛️ Verificando frontend en puerto 5173..."
-                            timeout 30 bash -c 'until curl -f http://localhost:5173/; do sleep 2; done' || (
+                            # Verificar frontend (usar nombre de servicio Docker)
+                            echo "⚛️ Verificando frontend en http://frontend:5173..."
+                            timeout 30 bash -c 'until curl -f http://frontend:5173/; do sleep 2; done' || (
                                 echo "❌ Frontend no responde"
-                                make logs-frontend
+                                make logs-frontend-ci
                                 exit 1
                             )
                             
