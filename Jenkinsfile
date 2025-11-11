@@ -80,16 +80,45 @@ pipeline {
                     docker system prune -f || true
                 '''
                 
-                // Construir las imágenes usando el Makefile
+                // Crear archivos .env si no existen (para CI/CD)
                 sh '''
-                    echo "🏗️ Construyendo imágenes con make build..."
-                    make build-app || true
+                    echo "📝 Creando archivos .env para CI/CD..."
+                    
+                    # Crear .env del backend si no existe
+                    if [ ! -f django-backend/.env ]; then
+                        echo "DEBUG=True" > django-backend/.env
+                        echo "SECRET_KEY=ci-cd-test-key-not-for-production" >> django-backend/.env
+                        echo "ALLOWED_HOSTS=localhost,127.0.0.1" >> django-backend/.env
+                        echo "✅ Backend .env creado"
+                    fi
+                    
+                    # Crear .env del frontend si no existe
+                    if [ ! -f react-frontend/.env ]; then
+                        echo "VITE_API_URL=http://localhost:8000" > react-frontend/.env
+                        echo "✅ Frontend .env creado"
+                    fi
                 '''
                 
-                // Verificar que las imágenes se crearon correctamente
+                // Construir las imágenes usando el Makefile
+                sh '''
+                    echo "🏗️ Construyendo imágenes con make build-app..."
+                    make build-app
+                '''
+                
+                // Iniciar los servicios después de construir
+                sh '''
+                    echo "🚀 Iniciando servicios de aplicación..."
+                    make up-app
+                '''
+                
+                // Verificar que las imágenes se crearon y los servicios están corriendo
                 sh '''
                     echo "🔍 Verificando imágenes creadas..."
                     docker images | grep point-cloud-prototype
+                    
+                    echo "📊 Verificando que los servicios iniciaron correctamente..."
+                    sleep 5
+                    docker compose ps backend frontend
                 '''
             }
         }
@@ -102,16 +131,10 @@ pipeline {
                         
                         script {
                             try {
-                                // Iniciar servicios en background para las pruebas
-                                sh 'make up-app'
-                                
-                                // Esperar a que los servicios estén listos
+                                // Los servicios ya están corriendo desde el Build stage
                                 sh '''
-                                    echo "⏳ Esperando a que los servicios estén listos..."
-                                    sleep 10
-                                    
                                     echo "🔍 Verificando estado de los servicios..."
-                                    make status
+                                    docker compose ps backend frontend
                                 '''
                                 
                                 // Ejecutar pruebas del backend
@@ -295,9 +318,17 @@ pipeline {
             echo '✅ ¡Pipeline ejecutado exitosamente!'
             
             script {
-                def buildDuration = currentBuild.durationString
+                def buildDuration = currentBuild.durationString.replace(' and counting', '')
                 def gitCommit = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                def gitBranch = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                
+                // Detectar nombre de rama correctamente (Jenkins usa detached HEAD)
+                def gitBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                if (gitBranch == 'HEAD') {
+                    gitBranch = sh(returnStdout: true, script: 'git symbolic-ref --short HEAD || git describe --tags --exact-match || echo "detached"').trim()
+                }
+                
+                // Construir URL del build manualmente si no está disponible
+                def buildUrl = env.BUILD_URL ?: "${env.JENKINS_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
                 
                 echo "⏱️ Duración del build: ${buildDuration}"
                 echo "🎉 Todas las etapas completadas correctamente"
@@ -339,7 +370,7 @@ pipeline {
                                 },
                                 {
                                     "name": "URL",
-                                    "value": "[Ver build](${env.BUILD_URL})",
+                                    "value": "[Ver build](${buildUrl})",
                                     "inline": true
                                 }
                             ],
@@ -355,9 +386,16 @@ pipeline {
             
             script {
                 def buildNumber = env.BUILD_NUMBER
-                def buildUrl = env.BUILD_URL
                 def gitCommit = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                def gitBranch = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                
+                // Detectar nombre de rama correctamente (Jenkins usa detached HEAD)
+                def gitBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                if (gitBranch == 'HEAD') {
+                    gitBranch = sh(returnStdout: true, script: 'git symbolic-ref --short HEAD || git describe --tags --exact-match || echo "detached"').trim()
+                }
+                
+                // Construir URL del build manualmente si no está disponible
+                def buildUrl = env.BUILD_URL ?: "${env.JENKINS_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
                 
                 echo "🔍 Build #${buildNumber} falló"
                 echo "🔗 URL: ${buildUrl}"
@@ -395,7 +433,7 @@ pipeline {
                                 },
                                 {
                                     "name": "URL",
-                                    "value": "[Ver logs](${env.BUILD_URL}console)",
+                                    "value": "[Ver logs](${buildUrl}console)",
                                     "inline": false
                                 }
                             ],
@@ -411,7 +449,15 @@ pipeline {
             
             script {
                 def gitCommit = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                def gitBranch = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                
+                // Detectar nombre de rama correctamente (Jenkins usa detached HEAD)
+                def gitBranch = env.GIT_BRANCH ?: env.BRANCH_NAME ?: sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                if (gitBranch == 'HEAD') {
+                    gitBranch = sh(returnStdout: true, script: 'git symbolic-ref --short HEAD || git describe --tags --exact-match || echo "detached"').trim()
+                }
+                
+                // Construir URL del build manualmente si no está disponible
+                def buildUrl = env.BUILD_URL ?: "${env.JENKINS_URL}job/${env.JOB_NAME}/${env.BUILD_NUMBER}/"
                 
                 echo '💡 Revisa las etapas de linting y testing para más detalles'
                 
@@ -447,7 +493,7 @@ pipeline {
                                 },
                                 {
                                     "name": "URL",
-                                    "value": "[Ver detalles](${env.BUILD_URL})",
+                                    "value": "[Ver detalles](${buildUrl})",
                                     "inline": false
                                 }
                             ],
