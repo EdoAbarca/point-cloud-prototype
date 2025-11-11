@@ -211,12 +211,17 @@ make jenkins-shell    # Acceder al contenedor
 
 #### Opción 1: Jenkins integrado en Docker Compose (Recomendado)
 
-El servicio de Jenkins ya está configurado en `docker-compose.yml` con:
+El servicio de Jenkins usa una **imagen personalizada** (`jenkins/Dockerfile`) que incluye:
+- ✅ **Docker CLI y Docker Compose**: Para ejecutar comandos del pipeline
+- ✅ **Make**: Para ejecutar comandos del Makefile
+- ✅ **Plugins preinstalados**: Git, Pipeline, Docker Workflow, Blue Ocean, etc.
 - **Puerto 8080**: Interfaz web
 - **Puerto 50000**: Agentes Jenkins (JNLP)
 - **Volumen persistente**: Los datos se guardan en `jenkins_home`
-- **Acceso a Docker**: Puede ejecutar contenedores Docker desde dentro
-- **Workspace montado**: Acceso directo al código del proyecto
+- **Acceso a Docker**: Socket compartido con el host (`/var/run/docker.sock`)
+- **Workspace montado**: Acceso directo al código del proyecto en `/workspace`
+
+> 📝 **Nota**: La primera vez que inicies Jenkins, se construirá la imagen personalizada. Esto puede tomar algunos minutos.
 
 #### Opción 2: Jenkins local standalone
 
