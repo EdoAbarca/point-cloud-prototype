@@ -48,6 +48,10 @@ build:
 	@echo "🔨 Construyendo imágenes Docker..."
 	docker compose build
 
+build-app:
+	@echo "🔨 Construyendo imágenes Docker de la aplicación (backend y frontend)..."
+	docker compose build backend frontend
+
 # Iniciar servicios con construcción automática
 up:
 	@echo "🚀 Iniciando servicios con construcción automática..."

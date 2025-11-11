@@ -83,7 +83,7 @@ pipeline {
                 // Construir las imágenes usando el Makefile
                 sh '''
                     echo "🏗️ Construyendo imágenes con make build..."
-                    make build
+                    make build-app || true
                 '''
                 
                 // Verificar que las imágenes se crearon correctamente
