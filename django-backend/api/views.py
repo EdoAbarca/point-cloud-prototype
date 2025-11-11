@@ -9,6 +9,10 @@ from .utils.mesh_3d import is_3d_mesh, load_3d_mesh, mesh_3d_info, plot_3d_mesh,
 
 load_dotenv()
 
+class HelloWorldView(APIView):
+    def get(self, request):
+        return Response({"message": "Hello, World!"}, status=status.HTTP_200_OK)
+
 
 #Clases a ser llamadas desde ThunderClient (Test backend)
 class PointCloudBackendView(APIView):

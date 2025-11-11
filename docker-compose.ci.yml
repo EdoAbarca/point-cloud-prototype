@@ -1,16 +1,18 @@
+# Docker Compose configuration for CI/CD (Jenkins)
+# This file extends docker-compose.yml but removes volume mounts
+# that would override built container contents with host directories
 
 services:
   frontend:
     build:
       context: react-frontend
       dockerfile: Dockerfile
-    volumes:
-      - ./react-frontend:/app
-      - /app/node_modules
+    # NO volume mounts - use built container as-is
     ports:
       - "5173:5173"
     environment:
       - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=test
     env_file:
       - react-frontend/.env
     networks:
@@ -20,8 +22,7 @@ services:
     build:
       context: django-backend
       dockerfile: Dockerfile
-    volumes: # Quitar en prod
-      - ./django-backend:/app
+    # NO volume mounts - use built container as-is
     ports:
       - "8000:8000"
     env_file:
@@ -48,22 +49,10 @@ services:
       - app-network
     restart: unless-stopped
 
-  # Uncomment and configure for production database
-  # db:
-  #   image: postgres:13
-  #   environment:
-  #     POSTGRES_DB: pointcloud
-  #     POSTGRES_USER: user
-  #     POSTGRES_PASSWORD: password
-  #   volumes:
-  #     - db-data:/var/lib/postgresql/data
-  #   networks:
-  #     - app-network
-
 networks:
   app-network:
+    external: true  # Use existing network created by main docker-compose.yml
+    name: point-cloud-prototype_app-network
 
 volumes:
   jenkins_home:
-  # Uncomment for persistent database storage
-  # db-data:

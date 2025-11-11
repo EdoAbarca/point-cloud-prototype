@@ -161,5 +161,184 @@ Si encuentras problemas:
    make status
    ```
 
+## CI/CD con Jenkins
+
+El proyecto incluye un servicio de Jenkins integrado en Docker Compose y un `Jenkinsfile` para automatización de CI/CD que utiliza los comandos del Makefile para mantener consistencia entre desarrollo local y pipelines de Jenkins.
+
+### Inicio rápido con Jenkins
+
+#### 1. Iniciar Jenkins
+
+```bash
+# Iniciar solo Jenkins
+make jenkins-up
+
+# O iniciar todos los servicios incluyendo Jenkins
+make up
+```
+
+Jenkins estará disponible en: **http://localhost:8080**
+
+#### 2. Configuración inicial
+
+```bash
+# Obtener la contraseña inicial de administrador
+make jenkins-pass
+```
+
+Copia la contraseña y úsala en la interfaz web de Jenkins para completar la configuración inicial.
+
+#### 3. Instalar plugins recomendados
+
+En el setup wizard de Jenkins, selecciona "Install suggested plugins". Esto incluirá:
+- Git plugin
+- Docker plugin  
+- Pipeline plugin
+- Blue Ocean (opcional, pero recomendado para mejor UI)
+
+### Comandos Jenkins disponibles
+
+```bash
+make jenkins-up       # Iniciar Jenkins
+make jenkins-stop     # Detener Jenkins
+make jenkins-restart  # Reiniciar Jenkins
+make jenkins-logs     # Ver logs en tiempo real
+make jenkins-pass     # Obtener contraseña inicial
+make jenkins-shell    # Acceder al contenedor
+```
+
+### Configuración de Jenkins
+
+#### Opción 1: Jenkins integrado en Docker Compose (Recomendado)
+
+El servicio de Jenkins ya está configurado en `docker-compose.yml` con:
+- **Puerto 8080**: Interfaz web
+- **Puerto 50000**: Agentes Jenkins (JNLP)
+- **Volumen persistente**: Los datos se guardan en `jenkins_home`
+- **Acceso a Docker**: Puede ejecutar contenedores Docker desde dentro
+- **Workspace montado**: Acceso directo al código del proyecto
+
+#### Opción 2: Jenkins local standalone
+
+Si prefieres Jenkins fuera de Docker Compose:
+
+```bash
+# Ejecutar Jenkins en Docker
+docker run -d -p 8080:8080 -p 50000:50000 \
+  -v jenkins_home:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --name jenkins \
+  jenkins/jenkins:lts
+
+# Obtener contraseña inicial
+docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+### Crear Pipeline Job en Jenkins
+
+1. **Accede a Jenkins**: http://localhost:8080
+
+2. **Crea un nuevo Pipeline Job**:
+   - Clic en "New Item" → "Pipeline" → Nombre: `point-cloud-prototype`
+
+3. **Configurar el repositorio**:
+   - Pipeline → "Pipeline script from SCM"
+   - SCM: **Git**
+   - Repository URL: `https://github.com/EdoAbarca/point-cloud-prototype.git`
+   - Branch: `*/main` o `*/14-jenkinsfile`
+   - Script Path: `Jenkinsfile`
+
+4. **Guardar y ejecutar**:
+   - Save → "Build Now"
+
+### Pipeline Stages
+
+El Jenkinsfile define las siguientes etapas:
+
+1. **Checkout**: Verificación del código fuente y estructura del proyecto
+2. **Build**: Construcción de imágenes Docker (`make build`)
+3. **Test**: Ejecución de pruebas backend y frontend en paralelo
+4. **Lint**: Análisis de código backend y frontend en paralelo
+5. **Integration Test**: Verificación de servicios funcionando
+6. **Deploy**: Despliegue condicional (solo en ramas main/master/tags)
+
+### Simulación de Pipeline (Desarrollo)
+
+Para probar el pipeline localmente sin Jenkins:
+
+```bash
+# Ejecutar simulación del pipeline
+./test-jenkins-pipeline.sh
+```
+
+### Comandos Pipeline disponibles
+
+El pipeline utiliza estos comandos del Makefile:
+
+```bash
+make build          # Construcción de imágenes
+make test-backend    # Pruebas Django
+make test-frontend   # Pruebas frontend (placeholder)
+make lint-backend    # Linting Python (pendiente configurar)
+make lint-frontend   # Linting ESLint
+make up-d            # Iniciar servicios en background
+make status          # Estado de contenedores
+make down            # Limpiar servicios
+```
+
+### Arquitectura Jenkins + Docker Compose
+
+El servicio de Jenkins está configurado con:
+
+- **Privilegios de root**: Para ejecutar comandos Docker dentro del contenedor
+- **Socket Docker compartido**: `/var/run/docker.sock` permite a Jenkins controlar Docker del host
+- **Workspace montado**: El proyecto está disponible en `/workspace` dentro de Jenkins
+- **Red compartida**: Jenkins puede comunicarse con frontend y backend
+- **Volumen persistente**: Configuración y jobs se guardan en `jenkins_home`
+
+### Configuración de Job en Jenkins
+
+1. **Crear nuevo Pipeline Job**:
+   - New Item → Pipeline
+   - Nombre: `point-cloud-prototype`
+
+2. **Configurar SCM**:
+   - Pipeline script from SCM
+   - SCM: Git
+   - Repository URL: `https://github.com/EdoAbarca/point-cloud-prototype.git`
+   - Branch: `*/main` (o la rama deseada)
+
+3. **Variables de entorno opcionales**:
+   ```bash
+   COMPOSE_PROJECT_NAME=point-cloud-prototype
+   DOCKER_BUILDKIT=1
+   COMPOSE_DOCKER_CLI_BUILD=1
+   ```
+
+4. **Triggers**:
+   - GitHub hook trigger (para builds automáticos)
+   - Poll SCM: `H/5 * * * *` (verificar cambios cada 5 min)
+
+### Resolución de problemas comunes
+
+**Jenkins:**
+- **No arranca**: Verificar que puerto 8080 esté disponible
+- **No puede acceder a Docker**: Verificar permisos de `/var/run/docker.sock`
+- **Jobs fallan**: Asegurarse que Jenkins tiene acceso a los comandos `make` y `docker compose`
+- **Pérdida de configuración**: Verificar que el volumen `jenkins_home` esté configurado
+
+**Tests y Build:**
+- **Tests del backend fallan**: Normal en desarrollo, requiere configuración de DB de test
+- **Linting del frontend falla**: Revisar y corregir errores de ESLint mostrados
+- **Servicios no responden**: Verificar puertos 8000 y 5173 disponibles
+- **Docker build lento**: Usar `COMPOSE_BAKE=true` para mejor rendimiento
+
+### Acceso a servicios
+
+Cuando todos los servicios están ejecutándose:
+- **Jenkins**: http://localhost:8080
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:8000
+
 
 
