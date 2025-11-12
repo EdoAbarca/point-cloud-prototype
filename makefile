@@ -1,7 +1,7 @@
 # Makefile para Point Cloud Prototype
 # Comandos de gestión de Docker Compose
 
-.PHONY: help build build-app up up-app up-d start start-d restart stop down down-app clean logs logs-f logs-backend logs-frontend status status-app test lint jenkins shell-backend shell-frontend test-backend test-frontend lint-backend lint-frontend jenkins-up jenkins-rebuild jenkins-stop jenkins-logs jenkins-pass jenkins-shell jenkins-restart jenkins-cli jenkins-build jenkins-status
+.PHONY: help build build-app up up-app up-d start start-d restart stop down down-app clean logs logs-f logs-backend logs-frontend status status-app test lint jenkins shell-backend shell-frontend test-backend test-frontend lint-backend lint-frontend jenkins-up jenkins-rebuild jenkins-stop jenkins-logs jenkins-pass jenkins-shell jenkins-restart jenkins-cli jenkins-build jenkins-status dev-setup dev-setup-backend dev-install-backend dev-requirements dev-migrate dev-run-backend dev-install-frontend dev-run-frontend dev-test-backend dev-test-backend-coverage dev-test-frontend dev-test-frontend-watch dev-test-frontend-coverage
 
 # Ayuda - muestra todos los comandos disponibles
 help:
@@ -43,8 +43,21 @@ help:
 	@echo "  jenkins-build   - Ejecuta el build del pipeline"
 	@echo "  jenkins-status  - Muestra el estado del último build"
 	@echo ""
-
-# Construir las imágenes Docker
+	@echo "Local Development:"
+	@echo "  dev-setup              - Complete local development setup (backend + frontend)"
+	@echo "  dev-setup-backend      - Create Python venv using uv"
+	@echo "  dev-install-backend    - Install backend dependencies"
+	@echo "  dev-requirements       - Compile requirements.txt with hashes from pyproject.toml"
+	@echo "  dev-migrate            - Run Django migrations"
+	@echo "  dev-run-backend        - Start Django development server"
+	@echo "  dev-install-frontend   - Install frontend dependencies"
+	@echo "  dev-run-frontend       - Start React development server"
+	@echo "  dev-test-backend       - Run backend tests"
+	@echo "  dev-test-backend-coverage - Run backend tests with coverage report"
+	@echo "  dev-test-frontend      - Run frontend tests"
+	@echo "  dev-test-frontend-watch - Run frontend tests in watch mode"
+	@echo "  dev-test-frontend-coverage - Run frontend tests with coverage report"
+	@echo ""# Construir las imágenes Docker
 build:
 	@echo "🔨 Construyendo imágenes Docker..."
 	docker compose build
@@ -288,6 +301,83 @@ jenkins-status:
 	@echo "📊 Estado del último build:"
 	@if [ ! -f .jenkins/jenkins-cli.jar ]; then $(MAKE) jenkins-cli; fi
 	@java -jar .jenkins/jenkins-cli.jar -s http://localhost:8080/ get-job point-cloud-prototype | grep -A 5 "lastBuild" || echo "⚠️ No hay builds disponibles"
+
+# ============================================
+# Local Development (without Docker)
+# ============================================
+
+# Setup Python virtual environment using uv
+dev-setup-backend:
+	@echo "🔧 Setting up backend development environment..."
+	cd django-backend && uv venv
+	@echo "✅ Virtual environment created. Activate with: source django-backend/.venv/bin/activate"
+
+# Install backend dependencies
+dev-install-backend:
+	@echo "📦 Installing backend dependencies..."
+	cd django-backend && uv pip install -e .
+	@echo "✅ Backend dependencies installed"
+
+# Compile requirements.txt with hashes
+dev-requirements:
+	@echo "📝 Compiling requirements.txt with hashes..."
+	cd django-backend && uv pip compile pyproject.toml -o requirements.txt --generate-hashes
+	@echo "✅ requirements.txt generated"
+
+# Run backend migrations
+dev-migrate:
+	@echo "🗄️ Running Django migrations..."
+	cd django-backend && source .venv/bin/activate && python manage.py migrate
+	@echo "✅ Migrations applied"
+
+# Run backend development server
+dev-run-backend:
+	@echo "🚀 Starting Django development server..."
+	cd django-backend && source .venv/bin/activate && python manage.py runserver
+
+# Install frontend dependencies
+dev-install-frontend:
+	@echo "📦 Installing frontend dependencies..."
+	cd react-frontend && npm install
+	@echo "✅ Frontend dependencies installed"
+
+# Run frontend development server
+dev-run-frontend:
+	@echo "🚀 Starting React development server..."
+	cd react-frontend && npm run dev
+
+# Run backend tests
+dev-test-backend:
+	@echo "🧪 Running backend tests..."
+	cd django-backend && source .venv/bin/activate && python manage.py test
+
+# Run backend tests with coverage
+dev-test-backend-coverage:
+	@echo "🧪 Running backend tests with coverage..."
+	cd django-backend && source .venv/bin/activate && coverage run --source='.' manage.py test && coverage report
+
+# Run frontend tests
+dev-test-frontend:
+	@echo "🧪 Running frontend tests..."
+	cd react-frontend && npm run test
+
+# Run frontend tests in watch mode
+dev-test-frontend-watch:
+	@echo "🧪 Running frontend tests in watch mode..."
+	cd react-frontend && npm run test:watch
+
+# Run frontend tests with coverage
+dev-test-frontend-coverage:
+	@echo "🧪 Running frontend tests with coverage..."
+	cd react-frontend && npm run test:coverage
+
+# Complete local setup
+dev-setup: dev-setup-backend dev-install-backend dev-requirements dev-migrate dev-install-frontend
+	@echo "✅ Complete development environment setup finished!"
+	@echo ""
+	@echo "To run the application:"
+	@echo "  Backend:  make dev-run-backend"
+	@echo "  Frontend: make dev-run-frontend"
 
 # Comando por defecto
 .DEFAULT_GOAL := help
