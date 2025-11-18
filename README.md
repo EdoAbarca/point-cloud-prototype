@@ -706,9 +706,218 @@ make dev-test-frontend
 - Procesamiento síncrono puede causar timeout en nubes muy grandes
 - Visualización de mallas muy grandes puede ser lenta en navegador
 
+### US-05: Generación de Mallas con Algoritmo de Umbral (Threshold) (NEW)
+La aplicación ahora incluye soporte para generación de mallas basada en filtrado por densidad, ideal para eliminar puntos ruidosos o dispersos antes de crear la malla.
+
+#### Características Principales
+- **Algoritmo Threshold**: Filtra puntos mediante análisis de densidad antes de generar la malla
+- **Eliminación automática de ruido**: Remueve puntos dispersos y aislados
+- **Parámetros ajustables**:
+  - **Threshold (0-2)**: Valor de umbral para filtrado por densidad (predeterminado: 0.5)
+    - **Threshold bajo (0-0.5)**: Retiene más puntos, menos filtrado
+    - **Threshold medio (0.5-1.0)**: Balance entre limpieza y detalle (recomendado)
+    - **Threshold alto (1.0-2.0)**: Filtrado agresivo, elimina más puntos dispersos
+  - **Alpha (0.1-5.0)**: Parámetro de forma alpha para generación de malla (predeterminado: 1.0)
+- **Estadísticas de filtrado**: Muestra cantidad de puntos originales, filtrados y removidos
+- **Control por slider**: Interfaz intuitiva con slider para ajuste de threshold
+- **Visualización integrada**: Mismo visor 3D con soporte para alternar entre modos
+- **Selección de algoritmo**: Elige entre Delaunay, Poisson y Threshold en la misma interfaz
+
+#### Cómo Usar el Threshold Mesh
+
+##### Desde la Vista de Biblioteca (PointsView)
+1. Navega a "Visualizar nube de puntos"
+2. Haz clic en "View Details" en cualquier nube de puntos
+3. En el modal de detalles:
+   - Selecciona "**Threshold**" en el selector de algoritmo
+   - Ajusta los parámetros según necesites:
+     - **Threshold**: Arrastra el slider para ajustar el nivel de filtrado
+       - Valores bajos mantienen más puntos
+       - Valores altos filtran más agresivamente
+     - **Alpha**: Controla la densidad de la malla resultante
+   - Haz clic en "**Generate Mesh**" para iniciar el proceso
+   - El proceso mostrará un spinner con estado "Generating..."
+   - Una vez completado, aparecerá una notificación con:
+     - Estadísticas de vértices y triángulos
+     - Puntos originales y filtrados
+     - Porcentaje de puntos removidos
+4. Para visualizar la malla generada:
+   - Haz clic en el botón "**Mesh View**" (habilitado después de generar)
+   - Alterna entre "Point Cloud" y "Mesh View" según necesites
+   - La vista de detalles muestra estadísticas de filtrado
+
+##### Comparación entre los Tres Algoritmos
+| Característica | Delaunay (Alpha Shapes) | Poisson Surface | Threshold Mesh |
+|---------------|------------------------|-----------------|----------------|
+| **Tipo de malla** | Abierta, puede tener huecos | Cerrada, watertight | Abierta, filtrada |
+| **Mejor para** | Formas complejas | Objetos sólidos | Datos con ruido |
+| **Pre-procesamiento** | Ninguno | Estimación de normales | Filtrado por densidad |
+| **Parámetros** | Alpha | Depth, Radius, Max NN | Threshold, Alpha |
+| **Tiempo** | Rápido | Moderado | Moderado |
+| **Topología** | Discontinuidades posibles | Siempre continua | Discontinuidades posibles |
+| **Uso ideal** | Modelado general | Superficies suaves | Limpieza de datos |
+
+#### Detalles Técnicos
+
+##### Backend (Django + Open3D)
+**Endpoints API:**
+- **POST** `/api/point_cloud/{id}/threshold`: Genera la malla con filtrado threshold
+  ```json
+  {
+    "threshold": 0.5,  // Opcional, default 0.5 (rango: 0-2)
+    "alpha": 1.0       // Opcional, default 1.0
+  }
+  ```
+  Respuesta:
+  ```json
+  {
+    "message": "Threshold mesh generated successfully",
+    "data": {
+      "mesh_file": "sphere_threshold.obj",
+      "vertices": 3500,
+      "triangles": 7000,
+      "processing_time": 2.5,
+      "algorithm": "threshold",
+      "threshold": 0.5,
+      "alpha": 1.0,
+      "filtering_stats": {
+        "points_original": 24000,
+        "points_filtered": 18000,
+        "points_removed": 6000,
+        "removal_percentage": 25.0
+      }
+    }
+  }
+  ```
+
+**Algoritmo:**
+1. Carga la nube de puntos con Open3D: `o3d.io.read_point_cloud()`
+2. Calcula el tamaño de voxel basado en bounding box (1% de la dimensión mayor)
+3. Realiza voxel downsampling: `cloud.voxel_down_sample(voxel_size)`
+4. Calcula distancias a vecinos más cercanos: `compute_nearest_neighbor_distance()`
+5. Filtra puntos basándose en umbral de densidad
+6. Genera malla con Alpha Shapes: `create_from_point_cloud_alpha_shape()`
+7. Calcula normales de vértices: `threshold_mesh.compute_vertex_normals()`
+8. Guarda malla en formato `.obj`: `o3d.io.write_triangle_mesh()`
+
+**Validaciones:**
+- ✅ Threshold entre 0 y 2
+- ✅ Alpha mayor que 0
+- ✅ Mínimo 10 puntos requeridos
+- ✅ Verificación de puntos suficientes después del filtrado (mínimo 4)
+- ✅ Manejo de errores con mensajes descriptivos
+
+##### Frontend (React + Three.js)
+**Componentes modificados:**
+- `PointsView.jsx`: Interfaz actualizada con selector de tres algoritmos
+  - Slider para threshold con visualización del valor actual
+  - Input numérico para alpha
+  - Muestra estadísticas de filtrado en la notificación de éxito
+  - Display de metadata específica de threshold en vista de detalles
+
+**Flujo de UI:**
+1. Usuario selecciona "Threshold" desde dropdown
+2. Aparecen controles específicos: slider de threshold y input de alpha
+3. Usuario ajusta parámetros en tiempo real
+4. Llamada a endpoint `/api/point_cloud/{id}/threshold`
+5. Notificación muestra estadísticas completas de filtrado
+6. Metadata en vista de detalles incluye:
+   - Puntos filtrados / puntos originales
+   - Porcentaje de puntos removidos
+
+#### Ejemplos de Uso
+
+##### Generar malla threshold con parámetros predeterminados
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/threshold \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+##### Generar malla threshold con filtrado ligero (threshold bajo)
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/threshold \
+  -H "Content-Type: application/json" \
+  -d '{"threshold": 0.2, "alpha": 1.0}'
+```
+
+##### Generar malla threshold con filtrado agresivo (threshold alto)
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/threshold \
+  -H "Content-Type: application/json" \
+  -d '{"threshold": 1.5, "alpha": 1.0}'
+```
+
+##### Generar malla threshold con alpha personalizado para mayor detalle
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/threshold \
+  -H "Content-Type: application/json" \
+  -d '{"threshold": 0.8, "alpha": 0.5}'
+```
+
+#### Pruebas
+
+##### Backend Tests (pytest)
+```bash
+# Ejecutar todos los tests de backend
+make dev-test-backend
+
+# Tests de threshold mesh incluyen:
+# - test_threshold_mesh_success
+# - test_threshold_with_default_parameters
+# - test_threshold_with_low_threshold
+# - test_threshold_with_high_threshold
+# - test_threshold_with_invalid_threshold_negative
+# - test_threshold_with_invalid_threshold_too_high
+# - test_threshold_with_invalid_alpha
+# - test_threshold_removes_sparse_points
+# - test_threshold_different_alpha_values
+# - test_threshold_mesh_file_created
+# - test_threshold_performance_acceptable
+# - test_threshold_replaces_previous_mesh
+# - test_compare_threshold_with_different_values
+```
+
+##### Frontend Tests (Vitest)
+```bash
+# Ejecutar tests del frontend
+make dev-test-frontend
+
+# Tests de threshold mesh incluyen:
+# - displays threshold algorithm option in algorithm selector
+# - shows threshold parameter controls when threshold algorithm is selected
+# - successfully generates threshold mesh with default parameters
+# - allows adjusting threshold parameter via slider
+# - generates threshold mesh with custom parameters
+# - displays threshold mesh metadata including filtering statistics
+# - switches to mesh view after successful threshold mesh generation
+```
+
+#### Casos de Uso Recomendados
+
+##### Cuándo usar Threshold Mesh
+- **Datos con ruido**: Cuando la nube de puntos contiene puntos dispersos o outliers
+- **Escaneos de baja calidad**: Para limpiar datos de sensores con precisión variable
+- **Preparación de datos**: Como paso previo antes de aplicar otros algoritmos
+- **Simplificación**: Para reducir la complejidad de nubes de puntos muy densas
+
+##### Cuándo NO usar Threshold Mesh
+- **Datos limpios y uniformes**: Use Delaunay directamente para mejor rendimiento
+- **Superficies cerradas requeridas**: Use Poisson para garantizar topología watertight
+- **Preservación de todos los detalles**: El filtrado puede eliminar características finas
+
+#### Limitaciones Conocidas
+
+##### Threshold Mesh
+- El filtrado puede eliminar detalles finos o características pequeñas
+- Threshold muy alto puede dejar muy pocos puntos para generar malla
+- No garantiza superficies cerradas (puede tener huecos)
+- El criterio de densidad puede no ser óptimo para todas las distribuciones de puntos
+- Requiere ajuste manual del parámetro threshold según los datos
+
 #### Próximas Mejoras (Roadmap)
 - [x] Soporte para algoritmo de reconstrucción Poisson ✅ **IMPLEMENTADO**
-- [ ] Soporte para algoritmo de threshold mesh
+- [x] Soporte para algoritmo de threshold mesh ✅ **IMPLEMENTADO**
 - [ ] Exportación de mallas en formatos .ply y .obj desde UI
 - [ ] Procesamiento asíncrono con Celery para nubes grandes (>100k puntos)
 - [ ] Preview en miniatura de la malla en la tarjeta
