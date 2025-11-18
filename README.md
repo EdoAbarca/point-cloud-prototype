@@ -345,5 +345,44 @@ Cuando todos los servicios están ejecutándose:
 - **Frontend**: http://localhost:5173
 - **Backend**: http://localhost:8000
 
+## Características
+
+### US-01: Carga de Archivos de Nube de Puntos
+- Carga de archivos `.pts` con validación automática
+- Extracción automática de metadatos (número de puntos, límites espaciales, intensidad)
+- Gestión de archivos a través de API REST
+- Interfaz de usuario para subir y listar archivos
+
+### US-02: Visualización Interactiva de Nubes de Puntos (NEW)
+La aplicación ahora incluye un visor 3D interactivo con las siguientes funcionalidades:
+
+#### Controles de Interacción
+- **Rotación**: Click izquierdo + arrastrar para rotar la vista
+- **Zoom**: Rueda del mouse o pinch para acercar/alejar
+- **Pan**: Click derecho + arrastrar para desplazar la cámara
+- **Reset**: Botón "Reset View" o tecla `R` para restaurar la vista por defecto
+
+#### Características Técnicas
+- **Renderizado con Three.js**: Utiliza React Three Fiber para renderizado optimizado
+- **OrbitControls**: Controles suaves con damping para mejor experiencia de usuario
+- **Sampling inteligente**: Carga un subconjunto de puntos (50%) para mejor rendimiento
+- **FPS Counter**: Contador de frames por segundo para monitorear rendimiento
+- **Visualización de colores**: Muestra los colores RGB originales de cada punto
+- **Responsive**: Funciona en desktop y dispositivos móviles
+
+#### Cómo Usar la Visualización
+1. Navega a "Visualizar nube de puntos" desde la página principal
+2. Haz clic en "View Details" en cualquier nube de puntos de la lista
+3. El visor 3D se abrirá en un modal mostrando:
+   - Vista 3D interactiva de la nube de puntos
+   - Información de controles en pantalla
+   - Contador de FPS
+   - Metadatos del archivo (límites espaciales, fecha de carga, etc.)
+
+#### API Endpoint
+- **GET** `/api/point_cloud/{id}/data`: Obtiene los datos de visualización
+  - Query parameter `sample`: Factor de muestreo opcional (ej. 0.5 para 50% de puntos)
+  - Retorna posiciones [x, y, z] y colores [r, g, b] en formato JSON
+
 
 
