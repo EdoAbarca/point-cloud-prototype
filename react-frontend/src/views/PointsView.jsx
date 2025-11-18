@@ -11,10 +11,12 @@ export default function PointsView() {
     const [generatingMesh, setGeneratingMesh] = useState(null);
     const [viewMode, setViewMode] = useState('cloud'); // 'cloud' or 'mesh'
     const [alphaValue, setAlphaValue] = useState(1.0);
-    const [meshAlgorithm, setMeshAlgorithm] = useState('delaunay'); // 'delaunay' or 'poisson'
+    const [meshAlgorithm, setMeshAlgorithm] = useState('delaunay'); // 'delaunay', 'poisson', or 'threshold'
     const [poissonDepth, setPoissonDepth] = useState(9);
     const [poissonRadius, setPoissonRadius] = useState(0.1);
     const [poissonMaxNN, setPoissonMaxNN] = useState(30);
+    const [thresholdValue, setThresholdValue] = useState(0.5);
+    const [thresholdAlpha, setThresholdAlpha] = useState(1.0);
 
     const fetchPointClouds = async () => {
         try {
@@ -73,6 +75,12 @@ export default function PointsView() {
                     radius: params.radius || 0.1,
                     max_nn: params.max_nn || 30
                 });
+            } else if (algorithm === 'threshold') {
+                url = `http://localhost:8000/api/point_cloud/${cloudId}/threshold`;
+                body = JSON.stringify({
+                    threshold: params.threshold || 0.5,
+                    alpha: params.alpha || 1.0
+                });
             } else {
                 throw new Error('Invalid algorithm');
             }
@@ -98,8 +106,16 @@ export default function PointsView() {
             // Switch to mesh view
             setViewMode('mesh');
             
-            const algorithmName = algorithm === 'delaunay' ? 'Delaunay' : 'Poisson';
-            alert(`${algorithmName} mesh generated successfully!\nVertices: ${data.data.vertices.toLocaleString()}\nTriangles: ${data.data.triangles.toLocaleString()}\nTime: ${data.data.processing_time}s`);
+            const algorithmName = algorithm === 'delaunay' ? 'Delaunay' : algorithm === 'poisson' ? 'Poisson' : 'Threshold';
+            let successMessage = `${algorithmName} mesh generated successfully!\nVertices: ${data.data.vertices.toLocaleString()}\nTriangles: ${data.data.triangles.toLocaleString()}\nTime: ${data.data.processing_time}s`;
+            
+            // Add filtering stats for threshold algorithm
+            if (algorithm === 'threshold' && data.data.filtering_stats) {
+                const stats = data.data.filtering_stats;
+                successMessage += `\n\nFiltering Stats:\nOriginal Points: ${stats.points_original.toLocaleString()}\nFiltered Points: ${stats.points_filtered.toLocaleString()}\nRemoved: ${stats.points_removed.toLocaleString()} (${stats.removal_percentage}%)`;
+            }
+            
+            alert(successMessage);
         } catch (e) {
             setError(e.message);
             alert(`Error generating mesh: ${e.message}`);
@@ -310,6 +326,7 @@ export default function PointsView() {
                                             >
                                                 <option value="delaunay">Delaunay</option>
                                                 <option value="poisson">Poisson</option>
+                                                <option value="threshold">Threshold</option>
                                             </select>
                                         </div>
 
@@ -369,11 +386,46 @@ export default function PointsView() {
                                             </>
                                         )}
 
+                                        {meshAlgorithm === 'threshold' && (
+                                            <>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-sm text-zinc-400" title="Density threshold for filtering. Lower = keep more points, Higher = remove more points">Threshold:</label>
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="2"
+                                                        step="0.1"
+                                                        value={thresholdValue}
+                                                        onChange={(e) => setThresholdValue(parseFloat(e.target.value))}
+                                                        className="w-24"
+                                                    />
+                                                    <span className="text-xs font-mono bg-zinc-700 px-2 py-1 rounded">{thresholdValue.toFixed(1)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-sm text-zinc-400">Alpha:</label>
+                                                    <input
+                                                        type="number"
+                                                        min="0.1"
+                                                        max="5"
+                                                        step="0.1"
+                                                        value={thresholdAlpha}
+                                                        onChange={(e) => setThresholdAlpha(parseFloat(e.target.value))}
+                                                        className="w-20 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+
                                         <button
                                             onClick={() => {
-                                                const params = meshAlgorithm === 'delaunay'
-                                                    ? { alpha: alphaValue }
-                                                    : { depth: poissonDepth, radius: poissonRadius, max_nn: poissonMaxNN };
+                                                let params;
+                                                if (meshAlgorithm === 'delaunay') {
+                                                    params = { alpha: alphaValue };
+                                                } else if (meshAlgorithm === 'poisson') {
+                                                    params = { depth: poissonDepth, radius: poissonRadius, max_nn: poissonMaxNN };
+                                                } else if (meshAlgorithm === 'threshold') {
+                                                    params = { threshold: thresholdValue, alpha: thresholdAlpha };
+                                                }
                                                 generateMesh(selectedCloud.id, meshAlgorithm, params);
                                             }}
                                             disabled={generatingMesh === selectedCloud.id}
@@ -432,6 +484,18 @@ export default function PointsView() {
                                     <div>
                                         <span className="text-zinc-400">Mesh Vertices:</span>
                                         <p className="font-mono text-xs">{selectedCloud.mesh_metadata.vertices.toLocaleString()}</p>
+                                    </div>
+                                )}
+                                {selectedCloud.mesh_metadata?.algorithm === 'threshold' && selectedCloud.mesh_metadata?.points_filtered && (
+                                    <div>
+                                        <span className="text-zinc-400">Points Filtered:</span>
+                                        <p className="font-mono text-xs">{selectedCloud.mesh_metadata.points_filtered.toLocaleString()} / {selectedCloud.mesh_metadata.points_original.toLocaleString()}</p>
+                                    </div>
+                                )}
+                                {selectedCloud.mesh_metadata?.algorithm === 'threshold' && selectedCloud.mesh_metadata?.removal_percentage && (
+                                    <div>
+                                        <span className="text-zinc-400">Removed:</span>
+                                        <p className="font-mono text-xs">{selectedCloud.mesh_metadata.removal_percentage}%</p>
                                     </div>
                                 )}
                                 {selectedCloud.metadata?.bounds && (
