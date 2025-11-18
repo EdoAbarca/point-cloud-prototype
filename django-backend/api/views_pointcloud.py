@@ -5,7 +5,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .models import PointCloud
 from .serializers import PointCloudSerializer
 from .utils.point_cloud import load_point_cloud, generate_cloud
-from .utils.mesh_3d import create_delaunay_mesh, create_poisson_mesh, load_3d_mesh
+from .utils.mesh_3d import create_delaunay_mesh, create_poisson_mesh, create_threshold_mesh, load_3d_mesh
 from asgiref.sync import sync_to_async
 import logging
 import os
@@ -561,6 +561,158 @@ class PointCloudMeshDataView(APIView):
             return Response(
                 {
                     'message': 'Failed to retrieve mesh data',
+                    'error': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PointCloudThresholdMeshView(APIView):
+    """
+    API endpoint for generating a threshold-based mesh from a point cloud.
+    
+    POST: Generate mesh by filtering sparse/noisy points based on density threshold
+    """
+    
+    def post(self, request, pk):
+        """
+        Generate threshold-based mesh from the point cloud.
+        
+        Request body (JSON):
+        - threshold: Density threshold for filtering (default: 0.5, range: 0-2)
+                    Lower values = more points retained (less filtering)
+                    Higher values = fewer points retained (more filtering)
+        - alpha: Alpha value for alpha shapes (default: 1.0)
+        """
+        try:
+            point_cloud = PointCloud.objects.get(pk=pk)
+            
+            # Get parameters from request with validation
+            threshold = request.data.get('threshold', 0.5)
+            alpha = request.data.get('alpha', 1.0)
+            
+            try:
+                threshold = float(threshold)
+                if not 0 <= threshold <= 2:
+                    raise ValueError("Threshold must be between 0 and 2")
+                    
+                alpha = float(alpha)
+                if alpha <= 0:
+                    raise ValueError("Alpha must be positive")
+            except (ValueError, TypeError) as e:
+                return Response(
+                    {
+                        'message': 'Invalid parameters',
+                        'error': str(e)
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            logger.info(f"Starting threshold mesh generation for point cloud {pk} with threshold={threshold}, alpha={alpha}")
+            
+            # Load the point cloud with Open3D
+            import open3d as o3d
+            pcd = o3d.io.read_point_cloud(point_cloud.file.path)
+            
+            if not pcd.has_points():
+                return Response(
+                    {
+                        'message': 'Point cloud has no points',
+                        'error': 'Cannot generate mesh from empty point cloud'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if point cloud has sufficient points
+            num_points = len(pcd.points)
+            if num_points < 10:
+                return Response(
+                    {
+                        'message': 'Insufficient points for threshold mesh',
+                        'error': f'Point cloud has only {num_points} points. At least 10 points required.'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Generate threshold mesh
+            start_time = time.time()
+            try:
+                threshold_mesh, mesh_file_path, num_filtered, num_original = create_threshold_mesh(
+                    pcd, 
+                    point_cloud.file.path, 
+                    threshold=threshold, 
+                    alpha=alpha
+                )
+            except ValueError as e:
+                return Response(
+                    {
+                        'message': 'Mesh generation failed',
+                        'error': str(e)
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            processing_time = time.time() - start_time
+            
+            # Calculate filtering statistics
+            points_removed = num_original - num_filtered
+            removal_percentage = (points_removed / num_original * 100) if num_original > 0 else 0
+            
+            # Update the model with mesh information
+            point_cloud.mesh_file = mesh_file_path
+            point_cloud.mesh_metadata = {
+                'algorithm': 'threshold',
+                'threshold': threshold,
+                'alpha': alpha,
+                'vertices': len(threshold_mesh.vertices),
+                'triangles': len(threshold_mesh.triangles),
+                'processing_time': round(processing_time, 2),
+                'points_original': num_original,
+                'points_filtered': num_filtered,
+                'points_removed': points_removed,
+                'removal_percentage': round(removal_percentage, 1)
+            }
+            point_cloud.save()
+            
+            logger.info(f"Successfully generated threshold mesh: {len(threshold_mesh.vertices)} vertices, "
+                       f"{len(threshold_mesh.triangles)} triangles, filtered {points_removed}/{num_original} "
+                       f"points ({removal_percentage:.1f}%) in {processing_time:.2f}s")
+            
+            return Response(
+                {
+                    'message': 'Threshold mesh generated successfully',
+                    'data': {
+                        'mesh_file': os.path.basename(mesh_file_path),
+                        'vertices': len(threshold_mesh.vertices),
+                        'triangles': len(threshold_mesh.triangles),
+                        'processing_time': round(processing_time, 2),
+                        'algorithm': 'threshold',
+                        'threshold': threshold,
+                        'alpha': alpha,
+                        'filtering_stats': {
+                            'points_original': num_original,
+                            'points_filtered': num_filtered,
+                            'points_removed': points_removed,
+                            'removal_percentage': round(removal_percentage, 1)
+                        }
+                    }
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except PointCloud.DoesNotExist:
+            return Response(
+                {
+                    'message': 'Point cloud not found',
+                    'error': f'No point cloud found with ID {pk}'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate threshold mesh for point cloud {pk}: {str(e)}", exc_info=True)
+            return Response(
+                {
+                    'message': 'Failed to generate threshold mesh',
                     'error': str(e)
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

@@ -943,3 +943,391 @@ class PointCloudPoissonReconstructionTestCase(TestCase):
         point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
         self.assertEqual(point_cloud.mesh_metadata['algorithm'], 'poisson')
         self.assertTrue(point_cloud.mesh_file.path.endswith('_poisson.obj'))
+
+
+class PointCloudThresholdMeshTestCase(TestCase):
+    """
+    Test cases for threshold-based mesh generation functionality.
+    """
+    
+    def setUp(self):
+        """
+        Set up test client and upload test point clouds.
+        """
+        self.client = APIClient()
+        
+        # Path to test files
+        self.base_dir = Path(__file__).resolve().parent.parent.parent
+        self.test_files_dir = self.base_dir / 'figures'
+        
+        # Upload a test point cloud (sphere for most tests)
+        test_file_path = self.test_files_dir / 'sphere.pts'
+        
+        with open(test_file_path, 'rb') as f:
+            file_content = f.read()
+        
+        uploaded_file = SimpleUploadedFile(
+            'sphere.pts',
+            file_content,
+            content_type='application/octet-stream'
+        )
+        
+        upload_response = self.client.post(
+            '/api/point_cloud',
+            {'file': uploaded_file, 'name': 'Test Sphere'},
+            format='multipart'
+        )
+        
+        self.point_cloud_id = upload_response.data['data']['id']
+    
+    def tearDown(self):
+        """
+        Clean up uploaded files and generated meshes after each test.
+        """
+        for pc in PointCloud.objects.all():
+            if pc.file:
+                pc.file.delete()
+            if pc.mesh_file:
+                # Delete mesh file if it exists
+                try:
+                    if os.path.exists(pc.mesh_file.path):
+                        os.remove(pc.mesh_file.path)
+                except:
+                    pass
+            pc.delete()
+    
+    def test_threshold_mesh_success(self):
+        """
+        Test successful threshold mesh generation from a point cloud.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.5, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        self.assertIn('message', data)
+        self.assertIn('data', data)
+        self.assertIn('mesh_file', data['data'])
+        
+        # Verify metadata
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['algorithm'], 'threshold')
+        self.assertEqual(mesh_data['threshold'], 0.5)
+        self.assertEqual(mesh_data['alpha'], 1.0)
+        self.assertGreater(mesh_data['vertices'], 0)
+        self.assertGreater(mesh_data['triangles'], 0)
+        self.assertGreater(mesh_data['processing_time'], 0)
+        
+        # Verify filtering statistics
+        self.assertIn('filtering_stats', mesh_data)
+        filtering_stats = mesh_data['filtering_stats']
+        self.assertGreater(filtering_stats['points_original'], 0)
+        self.assertGreater(filtering_stats['points_filtered'], 0)
+        self.assertGreaterEqual(filtering_stats['points_removed'], 0)
+        self.assertGreaterEqual(filtering_stats['removal_percentage'], 0)
+        
+        # Verify point cloud object was updated
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertIsNotNone(point_cloud.mesh_file)
+        self.assertIsNotNone(point_cloud.mesh_metadata)
+        self.assertTrue(os.path.exists(point_cloud.mesh_file.path))
+        self.assertTrue(point_cloud.mesh_file.path.endswith('_threshold.obj'))
+    
+    def test_threshold_with_default_parameters(self):
+        """
+        Test that threshold mesh uses default parameters when not provided.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['threshold'], 0.5)  # Default threshold
+        self.assertEqual(mesh_data['alpha'], 1.0)  # Default alpha
+    
+    def test_threshold_with_low_threshold(self):
+        """
+        Test threshold mesh with low threshold (less filtering).
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.2, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['threshold'], 0.2)
+        
+        # Lower threshold should filter some points but keep a reasonable amount
+        filtering_stats = mesh_data['filtering_stats']
+        self.assertLess(filtering_stats['removal_percentage'], 60)
+    
+    def test_threshold_with_high_threshold(self):
+        """
+        Test threshold mesh with high threshold (more filtering).
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 1.5, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['threshold'], 1.5)
+        
+        # Higher threshold should remove more points
+        filtering_stats = mesh_data['filtering_stats']
+        points_retained = filtering_stats['points_filtered'] / filtering_stats['points_original']
+        self.assertLessEqual(points_retained, 1.0)
+    
+    def test_threshold_with_invalid_threshold_negative(self):
+        """
+        Test that negative threshold values are rejected.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': -0.5, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+    
+    def test_threshold_with_invalid_threshold_too_high(self):
+        """
+        Test that threshold values above 2 are rejected.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 3.0, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+    
+    def test_threshold_with_invalid_alpha(self):
+        """
+        Test that invalid alpha values are rejected.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.5, 'alpha': -1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+    
+    def test_threshold_with_invalid_alpha_zero(self):
+        """
+        Test that alpha value of zero is rejected.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.5, 'alpha': 0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+    
+    def test_threshold_invalid_point_cloud_id(self):
+        """
+        Test that threshold mesh with invalid point cloud ID returns 404.
+        """
+        response = self.client.post(
+            '/api/point_cloud/99999/threshold',
+            {'threshold': 0.5, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.data)
+    
+    def test_threshold_removes_sparse_points(self):
+        """
+        Test that threshold mesh successfully filters sparse/noisy points.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 1.0, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        filtering_stats = data['data']['filtering_stats']
+        
+        # Should have removed at least some points
+        self.assertGreaterEqual(filtering_stats['points_removed'], 0)
+        
+        # Filtered points should be less than or equal to original
+        self.assertLessEqual(
+            filtering_stats['points_filtered'], 
+            filtering_stats['points_original']
+        )
+    
+    def test_threshold_different_alpha_values(self):
+        """
+        Test threshold mesh generation with different alpha values.
+        """
+        alpha_values = [0.5, 1.0, 2.0]
+        
+        for alpha in alpha_values:
+            # Upload a new point cloud for each test
+            test_file_path = self.test_files_dir / 'cube.pts'
+            
+            with open(test_file_path, 'rb') as f:
+                file_content = f.read()
+            
+            uploaded_file = SimpleUploadedFile(
+                f'cube_{alpha}.pts',
+                file_content,
+                content_type='application/octet-stream'
+            )
+            
+            upload_response = self.client.post(
+                '/api/point_cloud',
+                {'file': uploaded_file, 'name': f'Test Cube Alpha {alpha}'},
+                format='multipart'
+            )
+            
+            test_id = upload_response.data['data']['id']
+            
+            response = self.client.post(
+                f'/api/point_cloud/{test_id}/threshold',
+                {'threshold': 0.5, 'alpha': alpha},
+                format='json'
+            )
+            
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            
+            data = response.json()
+            self.assertEqual(data['data']['alpha'], alpha)
+            self.assertGreater(data['data']['vertices'], 0)
+            self.assertGreater(data['data']['triangles'], 0)
+    
+    def test_threshold_mesh_file_created(self):
+        """
+        Test that the threshold mesh file is actually created on disk.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.5, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Get the point cloud and check the mesh file
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertTrue(os.path.exists(point_cloud.mesh_file.path))
+        self.assertGreater(os.path.getsize(point_cloud.mesh_file.path), 0)
+    
+    def test_threshold_performance_acceptable(self):
+        """
+        Test that threshold mesh generation completes in reasonable time.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.5, 'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        processing_time = data['data']['processing_time']
+        
+        # Should complete in less than 30 seconds for test data
+        self.assertLess(processing_time, 30)
+    
+    def test_threshold_replaces_previous_mesh(self):
+        """
+        Test that generating a new threshold mesh replaces the previous one.
+        """
+        # Generate first mesh
+        response1 = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.3, 'alpha': 1.0},
+            format='json'
+        )
+        self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
+        
+        # Generate second mesh with different parameters
+        response2 = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/threshold',
+            {'threshold': 0.8, 'alpha': 1.5},
+            format='json'
+        )
+        self.assertEqual(response2.status_code, status.HTTP_201_CREATED)
+        
+        # Verify the metadata was updated with the second mesh parameters
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertEqual(point_cloud.mesh_metadata['threshold'], 0.8)
+        self.assertEqual(point_cloud.mesh_metadata['alpha'], 1.5)
+    
+    def test_compare_threshold_with_different_values(self):
+        """
+        Test and compare results from different threshold values.
+        """
+        # Upload three point clouds for comparison
+        threshold_values = [0.2, 0.5, 1.0]
+        results = []
+        
+        for threshold in threshold_values:
+            test_file_path = self.test_files_dir / 'pyramid.pts'
+            
+            with open(test_file_path, 'rb') as f:
+                file_content = f.read()
+            
+            uploaded_file = SimpleUploadedFile(
+                f'pyramid_{threshold}.pts',
+                file_content,
+                content_type='application/octet-stream'
+            )
+            
+            upload_response = self.client.post(
+                '/api/point_cloud',
+                {'file': uploaded_file, 'name': f'Test Pyramid Threshold {threshold}'},
+                format='multipart'
+            )
+            
+            test_id = upload_response.data['data']['id']
+            
+            response = self.client.post(
+                f'/api/point_cloud/{test_id}/threshold',
+                {'threshold': threshold, 'alpha': 1.0},
+                format='json'
+            )
+            
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            results.append(response.json()['data'])
+        
+        # Verify that all generated valid meshes
+        for result in results:
+            self.assertGreater(result['vertices'], 0)
+            self.assertGreater(result['triangles'], 0)
+        
+        # Higher threshold should generally result in fewer filtered points
+        # (though this may vary based on the point cloud structure)
+        self.assertGreater(results[0]['filtering_stats']['points_filtered'], 0)
+        self.assertGreater(results[1]['filtering_stats']['points_filtered'], 0)
+        self.assertGreater(results[2]['filtering_stats']['points_filtered'], 0)

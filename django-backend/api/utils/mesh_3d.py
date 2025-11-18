@@ -1,5 +1,6 @@
 import open3d as o3d
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Mallas tridimensionales: Representación digital de una superficie 3D compuesta por vértices, aristas y caras, típicamente en forma de triángulos o polígonos. Estas mallas se utilizan en gráficos por computadora, modelado 3D, simulaciones físicas y análisis estructural.
 # Atributos particulares:
@@ -152,23 +153,22 @@ def create_poisson_mesh(cloud, file_path, radius=0.1, max_nn=30, depth=9):
 	return poisson_mesh, output_poisson, densities
 
 
-def create_threshold_mesh(point_cloud, file_path, normalized_intensity, threshold = 0.5, alpha=1.0):
+def create_threshold_mesh(cloud, file_path, threshold=0.5, alpha=1.0):
 	"""
     Genera una malla tridimensional aplicando un filtro de umbrales a una nube de puntos.
-    La malla resultante se crea a partir de puntos que cumplen un criterio de intensidad.
+    La malla resultante se crea a partir de puntos que cumplen un criterio de intensidad o densidad.
 
     Parámetros
     ----------
-    point_cloud : numpy.ndarray
-        Nube de puntos original en formato de array. Debe incluir coordenadas (x, y, z) e intensidad.
+    cloud : o3d.geometry.PointCloud
+        La nube de puntos de entrada para generar la malla.
     file_path : str
         Ruta del archivo de la nube de puntos original. La malla generada se guardará en esta ubicación 
         con "_threshold.obj" añadido al nombre.
-    normalized_intensity : numpy.ndarray
-        Intensidades normalizadas asociadas a la nube de puntos, usadas para aplicar el filtro de umbral.
     threshold : float, opcional
-        Valor umbral para filtrar los puntos de la nube. Solo se incluirán puntos cuya intensidad sea
-        mayor que este valor. El valor predeterminado es 0.5.
+        Valor umbral para filtrar los puntos de la nube basado en densidad de vóxeles.
+        Solo se incluirán puntos que cumplan con el criterio de densidad.
+        El valor predeterminado es 0.5.
     alpha : float, opcional
         Parámetro de la forma alpha utilizado para la generación de la malla. Controla cuán ajustada es
         la malla a los puntos. Valores más bajos producen mallas más detalladas. El valor predeterminado
@@ -180,46 +180,83 @@ def create_threshold_mesh(point_cloud, file_path, normalized_intensity, threshol
         Una tupla que contiene:
         - threshold_mesh (o3d.geometry.TriangleMesh): La malla generada para los puntos filtrados.
         - threshold_output (str): Ruta del archivo donde se guardó la malla generada.
+        - num_filtered (int): Número de puntos después del filtrado.
+        - num_original (int): Número de puntos originales.
 
     Notas
     -----
-    - El filtrado de puntos se realiza mediante un valor de umbral aplicado a las intensidades normalizadas.
-      Solo los puntos cuya intensidad sea mayor al valor definido se consideran para la malla.
-    - Se utiliza la paleta de colores "inferno" para asignar colores a los puntos filtrados. Esto facilita
-      la visualización de las intensidades.
+    - El filtrado de puntos se realiza mediante voxelización y análisis de densidad.
+      Los puntos en vóxeles con baja densidad se consideran ruido y son removidos.
+    - Se utiliza el algoritmo de alpha shapes para generar la malla desde los puntos filtrados.
     - El comando `o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape` genera una malla 3D
       para los puntos filtrados. El parámetro `alpha` controla la densidad y ajuste de la malla generada.
     - El cálculo de las normales con `threshold_mesh.compute_vertex_normals()` define las propiedades de
       iluminación y sombreado de la malla para mejorar su visualización.
     - El archivo resultante se guarda en formato .obj, con un nombre modificado basado en la ruta de entrada.
     """
-	print("Generando malla con Algoritmos de Umbrales...")
-	#threshold = 0.5  # Define un umbral basado en la intensidad
-	mask = normalized_intensity > threshold
-	filtered_points = point_cloud[mask]
+	import numpy as np
 	
-	# Aplica la paleta inferno
-	cmap = plt.cm.inferno
-
-	# Crear nube filtrada
-	filtered_cloud = o3d.geometry.PointCloud()
-	filtered_cloud.points = o3d.utility.Vector3dVector(filtered_points[:, :3])
-	filtered_cloud.colors = o3d.utility.Vector3dVector(
-		cmap(filtered_points[:, 3])[:, :3]
-	)
-
-	# Crear malla Alpha Shape para puntos filtrados
+	print(f"Generando malla con Algoritmos de Umbrales (threshold={threshold}, alpha={alpha})...")
+	
+	# Store original point count
+	num_original = len(cloud.points)
+	
+	# Compute voxel size based on the bounding box
+	bbox = cloud.get_axis_aligned_bounding_box()
+	voxel_size = max(bbox.get_extent()) * 0.01  # 1% of the largest dimension
+	
+	# Downsample using voxel grid to remove sparse points
+	downsampled = cloud.voxel_down_sample(voxel_size=voxel_size)
+	
+	# Estimate point cloud density using nearest neighbor distances
+	distances = downsampled.compute_nearest_neighbor_distance()
+	avg_dist = np.mean(distances)
+	std_dist = np.std(distances)
+	
+	# Filter points based on threshold (remove outliers with distance > threshold)
+	# Lower threshold = keep more points (less filtering)
+	# Higher threshold = keep fewer points (more filtering)
+	distance_threshold = avg_dist + (threshold * std_dist * 2)
+	
+	# Create mask for points to keep
+	points_to_keep = []
+	for i, point in enumerate(np.asarray(downsampled.points)):
+		if distances[i] <= distance_threshold:
+			points_to_keep.append(i)
+	
+	# Filter the point cloud
+	filtered_cloud = downsampled.select_by_index(points_to_keep)
+	
+	num_filtered = len(filtered_cloud.points)
+	print(f"Filtrado: {num_original} puntos → {num_filtered} puntos ({num_filtered/num_original*100:.1f}% retenidos)")
+	
+	if num_filtered < 4:
+		raise ValueError(f"Insufficient points after filtering ({num_filtered}). Try lowering the threshold.")
+	
+	# Preserve or estimate colors
+	if cloud.has_colors():
+		filtered_colors = np.asarray(cloud.colors)[points_to_keep]
+		filtered_cloud.colors = o3d.utility.Vector3dVector(filtered_colors)
+	else:
+		# Use inferno colormap based on z-coordinate
+		points = np.asarray(filtered_cloud.points)
+		z_norm = (points[:, 2] - points[:, 2].min()) / (points[:, 2].max() - points[:, 2].min() + 1e-8)
+		cmap = plt.cm.inferno
+		colors = cmap(z_norm)[:, :3]
+		filtered_cloud.colors = o3d.utility.Vector3dVector(colors)
+	
+	# Create mesh using Alpha Shape algorithm
 	threshold_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(
 		filtered_cloud, alpha=alpha
 	)
 	threshold_mesh.compute_vertex_normals()
-	#o3d.visualization.draw_geometries(
-	#	[threshold_mesh], window_name="Malla - Umbral"
-	#)
+	
+	# Save mesh to file
 	threshold_output = file_path.replace(".pts", "_threshold.obj")
 	o3d.io.write_triangle_mesh(threshold_output, threshold_mesh)
 	print(f"Malla por Umbral guardada en: {threshold_output}")
-	return threshold_mesh, threshold_output
+	
+	return threshold_mesh, threshold_output, num_filtered, num_original
 
 # Propuesta lectura de datos a testear ASAP
 # def mesh_3d_info(mesh):
