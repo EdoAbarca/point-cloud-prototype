@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import PointsView from '../views/PointsView';
 
@@ -11,6 +11,15 @@ vi.mock('../components/PointCloudViewer', () => ({
   default: ({ pointCloudId, onError }) => (
     <div data-testid="point-cloud-viewer">
       Point Cloud Viewer - ID: {pointCloudId}
+    </div>
+  ),
+}));
+
+// Mock MeshViewer component
+vi.mock('../components/MeshViewer', () => ({
+  default: ({ pointCloudId, onError }) => (
+    <div data-testid="mesh-viewer">
+      Mesh Viewer - ID: {pointCloudId}
     </div>
   ),
 }));
@@ -311,6 +320,313 @@ describe('PointsView', () => {
       // For Test Cloud 1, bounds should be displayed
       expect(screen.getByText('Bounds X:')).toBeInTheDocument();
       expect(screen.getByText('Bounds Y:')).toBeInTheDocument();
+    });
+  });
+
+  it('displays algorithm selector with Delaunay and Poisson options', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      const algorithmSelect = screen.getByDisplayValue('Delaunay');
+      expect(algorithmSelect).toBeInTheDocument();
+      
+      // Check that both options are available
+      const options = within(algorithmSelect.parentElement).getAllByRole('option');
+      expect(options.length).toBe(2);
+      expect(options[0]).toHaveValue('delaunay');
+      expect(options[1]).toHaveValue('poisson');
+    });
+  });
+
+  it('shows Poisson parameters when Poisson algorithm is selected', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      const algorithmSelect = screen.getByDisplayValue('Delaunay');
+      fireEvent.change(algorithmSelect, { target: { value: 'poisson' } });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Depth:')).toBeInTheDocument();
+      expect(screen.getByText('Radius:')).toBeInTheDocument();
+      expect(screen.getByText('Max NN:')).toBeInTheDocument();
+    });
+  });
+
+  it('shows Alpha parameter when Delaunay algorithm is selected', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      // Delaunay is selected by default
+      expect(screen.getByText('Alpha:')).toBeInTheDocument();
+      expect(screen.queryByText('Depth:')).not.toBeInTheDocument();
+    });
+  });
+
+  it('generates Poisson mesh successfully', async () => {
+    const mockMeshResponse = {
+      message: 'Poisson mesh generated successfully',
+      data: {
+        mesh_file: 'test_poisson.obj',
+        vertices: 5000,
+        triangles: 10000,
+        processing_time: 2.5,
+        algorithm: 'poisson',
+        depth: 9,
+        radius: 0.1,
+        max_nn: 30,
+        has_normals: true
+      }
+    };
+
+    const mockUpdatedCloud = {
+      ...mockPointClouds[0],
+      mesh_file: '/media/pointclouds/test_poisson.obj',
+      mesh_metadata: {
+        algorithm: 'poisson',
+        depth: 9,
+        vertices: 5000,
+        triangles: 10000,
+        processing_time: 2.5
+      }
+    };
+
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockMeshResponse
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockUpdatedCloud, mockPointClouds[1]] })
+      });
+
+    global.alert = vi.fn();
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    // Wait for modal to be rendered
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Change algorithm to Poisson
+    const algorithmSelect = screen.getByDisplayValue('Delaunay');
+    fireEvent.change(algorithmSelect, { target: { value: 'poisson' } });
+
+    // Wait for Poisson parameters to appear
+    await waitFor(() => {
+      expect(screen.getByText('Depth:')).toBeInTheDocument();
+    });
+
+    // Find and click the generate button
+    const generateButtons = screen.getAllByText(/Generate Mesh/i);
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Poisson mesh generated successfully')
+      );
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('5,000')
+      );
+    });
+  });
+
+  it('generates Delaunay mesh successfully', async () => {
+    const mockMeshResponse = {
+      message: 'Delaunay mesh generated successfully',
+      data: {
+        mesh_file: 'test_delaunay.obj',
+        vertices: 3000,
+        triangles: 6000,
+        processing_time: 1.2,
+        algorithm: 'delaunay',
+        alpha: 1.0
+      }
+    };
+
+    const mockUpdatedCloud = {
+      ...mockPointClouds[0],
+      mesh_file: '/media/pointclouds/test_delaunay.obj',
+      mesh_metadata: {
+        algorithm: 'delaunay',
+        alpha: 1.0,
+        vertices: 3000,
+        triangles: 6000,
+        processing_time: 1.2
+      }
+    };
+
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockMeshResponse
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockUpdatedCloud, mockPointClouds[1]] })
+      });
+
+    global.alert = vi.fn();
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    // Wait for modal to be rendered by checking for point cloud viewer
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Find and click the generate button
+    const generateButtons = screen.getAllByText(/Generate Mesh/i);
+    // The one inside the modal is the second one
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Delaunay mesh generated successfully')
+      );
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('3,000')
+      );
+    });
+  });
+
+  it('handles mesh generation error', async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Failed to generate mesh' })
+      });
+
+    global.alert = vi.fn();
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    // Wait for modal to be rendered
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Find and click the generate button
+    const generateButtons = screen.getAllByText(/Generate Mesh/i);
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Error generating mesh')
+      );
+    });
+  });
+
+  it('displays mesh metadata when mesh is generated', async () => {
+    const mockCloudWithMesh = {
+      ...mockPointClouds[0],
+      mesh_file: '/media/pointclouds/test_poisson.obj',
+      mesh_metadata: {
+        algorithm: 'poisson',
+        vertices: 5000,
+        triangles: 10000
+      }
+    };
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: [mockCloudWithMesh] })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Verify mesh button shows "View Mesh" instead of "Generate Mesh"
+    const meshButtons = screen.getAllByText(/View Mesh/i);
+    expect(meshButtons.length).toBeGreaterThan(0);
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      // Wait for modal to appear
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+      
+      // Check for mesh metadata in the modal
+      expect(screen.getByText('Mesh Algorithm:')).toBeInTheDocument();
+      expect(screen.getByText('poisson')).toBeInTheDocument();
+      expect(screen.getByText('Mesh Vertices:')).toBeInTheDocument();
+      expect(screen.getByText('5,000')).toBeInTheDocument();
     });
   });
 });

@@ -5,6 +5,7 @@ from .views_pointcloud import (
     PointCloudDetailView, 
     PointCloudDataView,
     PointCloudTriangulateView,
+    PointCloudPoissonReconstructView,
     PointCloudMeshDataView
 )
 
@@ -14,8 +15,9 @@ urlpatterns = [
     path("point_cloud/<int:pk>", PointCloudDetailView.as_view(), name='point-cloud-detail'),
     path("point_cloud/<int:pk>/data", PointCloudDataView.as_view(), name='point-cloud-data'),
     
-    # Point Cloud Mesh Generation API (User Story 3)
+    # Point Cloud Mesh Generation API (User Story 3 & 4)
     path("point_cloud/<int:pk>/triangulate", PointCloudTriangulateView.as_view(), name='point-cloud-triangulate'),
+    path("point_cloud/<int:pk>/reconstruct_poisson", PointCloudPoissonReconstructView.as_view(), name='point-cloud-poisson-reconstruct'),
     path("point_cloud/<int:pk>/mesh", PointCloudMeshDataView.as_view(), name='point-cloud-mesh-data'),
     
     # Legacy endpoints (to be refactored)
