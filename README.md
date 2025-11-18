@@ -915,17 +915,360 @@ make dev-test-frontend
 - El criterio de densidad puede no ser óptimo para todas las distribuciones de puntos
 - Requiere ajuste manual del parámetro threshold según los datos
 
+### US-06: Visualización Interactiva de Mallas 3D Generadas (NEW)
+La aplicación ahora permite visualizar y alternar entre la nube de puntos original y las mallas 3D generadas con cualquiera de los tres algoritmos disponibles.
+
+#### Características Principales
+- **Visualización dual**: Alterna entre vista de nube de puntos y malla generada
+- **Soporte multi-algoritmo**: Visualiza mallas generadas con Delaunay, Poisson o Threshold
+- **Renderizado optimizado**: Utiliza `THREE.BufferGeometry` para rendering eficiente
+- **Controles de cámara**: OrbitControls interactivos (rotar, zoom, pan)
+- **Iluminación avanzada**: Utiliza Phong shading con luces direccionales y ambientales
+- **Información en tiempo real**: Panel de metadata con estadísticas de la malla
+- **Visualización inmediata**: Muestra la malla automáticamente después de generarla
+- **Gestión de múltiples mallas**: Permite cargar y alternar entre diferentes mallas sin interferencias
+- **Manejo de errores**: Mensajes claros cuando la malla no existe o falla al cargar
+- **FPS Counter**: Monitoreo de rendimiento en tiempo real
+
+#### Cómo Usar la Visualización de Mallas
+
+##### Visualizar una Malla Existente
+1. Navega a "Visualizar nube de puntos"
+2. Identifica nubes de puntos que tengan malla generada (botón "View Mesh" habilitado)
+3. Haz clic en "View Details" o "View Mesh" en la tarjeta
+4. En el modal de detalles:
+   - Verás dos botones de toggle: **"Point Cloud"** y **"Mesh View"**
+   - Haz clic en "**Mesh View**" para visualizar la malla generada
+   - El visor 3D mostrará la malla con colores, iluminación y controles interactivos
+
+##### Alternar entre Vistas
+1. Dentro del modal de detalles:
+   - **Point Cloud**: Muestra la nube de puntos original
+   - **Mesh View**: Muestra la malla 3D generada
+2. Los botones de toggle están siempre visibles en la parte superior
+3. El botón activo se resalta en azul
+4. El botón "Mesh View" está deshabilitado si no existe malla generada
+
+##### Controles Interactivos en el Visor de Mallas
+- **Rotar**: Click izquierdo + arrastrar
+- **Zoom**: Rueda del mouse o pinch (touchpad/móvil)
+- **Pan**: Click derecho + arrastrar o dos dedos (touchpad)
+- **Reset View**: Botón "Reset View" para volver a la vista inicial
+- **Back**: Botón "Back" para cerrar el visor
+
+##### Generar y Visualizar Inmediatamente
+1. Abre el modal de detalles de una nube de puntos
+2. Selecciona un algoritmo (Delaunay, Poisson o Threshold)
+3. Ajusta parámetros según necesites
+4. Haz clic en "**Generate Mesh**"
+5. **Automáticamente**: Al completar la generación, la vista cambia a "Mesh View"
+6. Puedes regresar a "Point Cloud" para comparar con el original
+
+##### Trabajar con Múltiples Mallas
+1. Genera mallas para diferentes nubes de puntos
+2. Abre el modal de cualquier nube con malla generada
+3. Alterna entre vistas independientemente
+4. Cierra el modal y abre otro - cada uno mantiene su propia malla
+5. Las mallas no interfieren entre sí, incluso si están abiertas simultáneamente
+
+#### Detalles Técnicos
+
+##### Componente MeshViewer
+**Ubicación**: `react-frontend/src/components/MeshViewer.jsx`
+
+**Características técnicas:**
+- **Renderizado con BufferGeometry**: Utiliza `THREE.BufferGeometry` para eficiencia
+- **Índices de triángulos**: `Uint32Array` para mallas grandes (>65k vértices)
+- **Material Phong**: `meshPhongMaterial` con `vertexColors` y `DoubleSide` rendering
+- **Iluminación**: 
+  - Luz ambiental (intensidad 0.5) para iluminación base
+  - Dos luces direccionales para profundidad y detalle
+- **Cálculo automático de normales**: `geometry.computeVertexNormals()` para iluminación correcta
+- **Posicionamiento de cámara**: Automático basado en `boundingSphere` de la geometría
+- **FPS Counter**: Contador de frames por segundo para monitoreo de rendimiento
+- **Grid Helper**: Rejilla de referencia en el plano XY
+- **Axes Helper**: Ejes coordenados (X: rojo, Y: verde, Z: azul)
+
+**Props del componente:**
+```jsx
+<MeshViewer 
+  pointCloudId={number}  // ID de la nube de puntos
+  onError={function}     // Callback para errores
+  onBack={function}      // Callback para botón "Back"
+/>
+```
+
+**Estados de carga:**
+- **Loading**: Spinner animado con mensaje "Loading mesh..."
+- **Error**: Icono de error con mensaje descriptivo y botón "Back to Library"
+- **Success**: Renderizado del visor 3D con controles
+
+##### Backend API
+**Endpoint**: `GET /api/point_cloud/{id}/mesh`
+
+**Respuesta exitosa:**
+```json
+{
+  "message": "Mesh data retrieved successfully",
+  "name": "cube",
+  "algorithm": "delaunay",
+  "data": {
+    "vertices": [[x1, y1, z1], [x2, y2, z2], ...],
+    "triangles": [[i1, i2, i3], [i4, i5, i6], ...],
+    "colors": [[r1, g1, b1], [r2, g2, b2], ...],
+    "normals": [[nx1, ny1, nz1], [nx2, ny2, nz2], ...],
+    "num_vertices": 1234,
+    "num_triangles": 5678
+  },
+  "metadata": {
+    "algorithm": "delaunay",
+    "alpha": 1.0,
+    "vertices": 1234,
+    "triangles": 5678,
+    "processing_time": 2.5
+  }
+}
+```
+
+**Códigos de error:**
+- **404 Not Found**: No existe malla generada para ese point cloud
+- **404 Not Found**: Point cloud no existe
+- **500 Internal Server Error**: Error al cargar o procesar la malla
+
+##### Integración con PointsView
+**Ubicación**: `react-frontend/src/views/PointsView.jsx`
+
+**Lógica de toggle:**
+1. Estado `viewMode` controla la vista actual: `'cloud'` o `'mesh'`
+2. Por defecto inicia en `'cloud'` al abrir el modal
+3. Al generar malla exitosamente, cambia automáticamente a `'mesh'`
+4. Los botones de toggle permiten cambiar entre vistas manualmente
+5. El botón "Mesh View" está deshabilitado si `!selectedCloud.mesh_file`
+6. Al cerrar el modal, `viewMode` se resetea a `'cloud'`
+
+**Renderizado condicional:**
+```jsx
+{viewMode === 'cloud' ? (
+  <PointCloudViewer pointCloudId={selectedCloud.id} onError={setError} />
+) : (
+  <MeshViewer pointCloudId={selectedCloud.id} onError={setError} />
+)}
+```
+
+##### Panel de Información de Malla
+Ubicado en `MeshViewer.jsx`, muestra:
+- **Algoritmo**: Delaunay, Poisson o Threshold
+- **Vertices**: Conteo de vértices formateado (ej. "1,234")
+- **Triangles**: Conteo de triángulos formateado (ej. "5,678")
+- **Alpha**: Parámetro alpha (solo Delaunay y Threshold)
+- **Processing Time**: Tiempo de generación en segundos
+
+Para algoritmo Threshold, muestra información adicional:
+- **Threshold**: Valor de umbral usado
+- **Points Filtered**: Cantidad de puntos después del filtrado
+- **Points Removed**: Cantidad y porcentaje de puntos eliminados
+
+#### Pruebas
+
+##### Frontend Tests (Vitest)
+**Archivo**: `react-frontend/src/test/PointsView.test.jsx`
+
+**Tests de toggle (nuevo en US-06):**
+```javascript
+describe('View Toggle Functionality (US-06)', () => {
+  // Tests incluyen:
+  - displays toggle buttons for point cloud and mesh views
+  - starts with point cloud view by default
+  - toggles from point cloud to mesh view when mesh exists
+  - toggles back from mesh to point cloud view
+  - disables mesh view button when no mesh has been generated
+  - shows alert when trying to toggle to mesh view without generated mesh
+  - displays mesh immediately after generation without page reload
+  - maintains toggle state when switching between multiple point clouds
+})
+```
+
+**Archivo**: `react-frontend/src/test/MeshViewer.test.jsx`
+
+**Tests de componente:**
+```javascript
+describe('MeshViewer', () => {
+  // Tests incluyen:
+  - renders loading state initially
+  - fetches and displays mesh data successfully
+  - displays error when mesh is not found
+  - handles network errors gracefully
+  - calls onError callback when error occurs
+  - displays mesh metadata correctly
+})
+```
+
+**Ejecutar tests:**
+```bash
+# Todos los tests del frontend
+make dev-test-frontend
+
+# Tests en modo watch (desarrollo)
+make dev-test-frontend-watch
+
+# Tests con coverage
+make dev-test-frontend-coverage
+```
+
+##### Backend Tests (pytest)
+**Archivo**: `django-backend/api/tests.py`
+
+**Tests de endpoint de malla:**
+```python
+class PointCloudTriangulateTestCase(TestCase):
+    # Tests incluyen:
+    def test_get_mesh_data_success(self):
+        # Verifica que se pueden obtener datos de malla después de generarla
+    
+    def test_get_mesh_data_without_generation(self):
+        # Verifica error 404 cuando no existe malla
+    
+    def test_get_mesh_data_invalid_id(self):
+        # Verifica error 404 con ID inválido
+    
+    def test_regenerate_mesh_overwrites_previous(self):
+        # Verifica que regenerar reemplaza la malla anterior
+```
+
+**Ejecutar tests:**
+```bash
+# Todos los tests del backend
+make dev-test-backend
+
+# Tests con coverage
+make dev-test-backend-coverage
+
+# Tests específicos
+cd django-backend
+python manage.py test api.tests.PointCloudTriangulateTestCase
+```
+
+#### Casos de Uso
+
+##### Caso 1: Visualizar Malla Recién Generada
+1. Usuario sube una nube de puntos
+2. Selecciona algoritmo y ajusta parámetros
+3. Genera la malla
+4. **Automáticamente** la vista cambia a "Mesh View"
+5. Ve la malla renderizada con iluminación y colores
+6. Puede rotar, hacer zoom y explorar la malla
+
+##### Caso 2: Comparar Nube de Puntos vs Malla
+1. Usuario tiene una nube con malla generada
+2. Abre el modal en vista "Point Cloud"
+3. Observa la nube de puntos original
+4. Hace clic en "Mesh View"
+5. Compara visualmente la malla generada vs los puntos originales
+6. Alterna entre vistas para análisis comparativo
+
+##### Caso 3: Regenerar Malla con Nuevos Parámetros
+1. Usuario visualiza malla existente
+2. No está satisfecho con el resultado
+3. Cambia a "Point Cloud" view
+4. Ajusta parámetros del algoritmo
+5. Regenera la malla con "Regenerate Mesh"
+6. Vista cambia automáticamente a "Mesh View" con nueva malla
+
+##### Caso 4: Trabajar con Múltiples Mallas
+1. Usuario tiene varias nubes de puntos con mallas
+2. Abre la primera nube, visualiza su malla
+3. Cierra el modal
+4. Abre la segunda nube, visualiza su malla
+5. Cada malla se carga y renderiza independientemente
+6. No hay interferencia entre visualizaciones
+
+#### Manejo de Errores
+
+##### Malla No Encontrada
+**Escenario**: Usuario intenta ver malla que no ha sido generada
+**Mensaje**: "Mesh not found. Please generate the mesh first."
+**Acción**: Botón "Back to Library" para volver a la lista
+
+##### Error de Red
+**Escenario**: Falla la conexión al backend
+**Mensaje**: "Failed to fetch mesh data: [error details]"
+**Acción**: Botón "Back to Library" y mensaje de error descriptivo
+
+##### Point Cloud Inexistente
+**Escenario**: ID de nube de puntos no válido
+**Mensaje**: "Point cloud not found"
+**Acción**: Error 404 con redirección a biblioteca
+
+##### Error de Renderización
+**Escenario**: Datos de malla corruptos o incompletos
+**Efecto**: No se renderiza la geometría
+**Mensaje**: Error en consola, malla no visible
+**Prevención**: Validaciones en backend aseguran datos correctos
+
+#### Optimizaciones de Rendimiento
+
+##### BufferGeometry
+- Utiliza arrays tipados (`Float32Array`, `Uint32Array`) para eficiencia de memoria
+- Reduce overhead de objetos JavaScript comparado con `Geometry` legacy
+- Soporta mallas grandes (>100k triángulos) sin problemas
+
+##### Índices de Triángulos
+- `Uint32Array` para índices permite hasta ~4 mil millones de vértices
+- Reduce duplicación de vértices compartidos entre triángulos
+- Mejora performance de renderizado WebGL
+
+##### Cálculo de Normales
+- Normales calculadas una sola vez al cargar la geometría
+- `computeVertexNormals()` para iluminación suave
+- No se recalculan en cada frame
+
+##### Camera Positioning
+- Cámara se posiciona automáticamente basándose en `boundingSphere`
+- No requiere ajuste manual por parte del usuario
+- Garantiza que toda la malla sea visible al inicio
+
+##### FPS Monitoring
+- Contador actualizado cada segundo (no cada frame)
+- Permite detectar problemas de performance
+- Útil para debugging y optimización
+
+#### Limitaciones Conocidas
+
+##### Rendering de Mallas Muy Grandes
+- Mallas con >500k triángulos pueden causar lag en navegadores
+- Recomendado: simplificar mallas grandes antes de visualizar
+- Solución futura: Level of Detail (LOD) automático
+
+##### Colores de Vértices
+- Requiere que la malla tenga datos de color en cada vértice
+- Algunos algoritmos pueden no preservar colores originales
+- Fallback: color sólido si no hay datos de color
+
+##### Memoria del Navegador
+- Cargar múltiples mallas grandes simultáneamente consume RAM
+- Recomendado: cerrar modales no utilizados
+- Solución futura: liberación automática de memoria
+
+##### Dispositivos Móviles
+- Controles táctiles pueden ser menos precisos que mouse
+- Mallas muy grandes pueden causar lag en dispositivos antiguos
+- Recomendado: generar mallas con menos detalle para móviles
+
 #### Próximas Mejoras (Roadmap)
 - [x] Soporte para algoritmo de reconstrucción Poisson ✅ **IMPLEMENTADO**
 - [x] Soporte para algoritmo de threshold mesh ✅ **IMPLEMENTADO**
+- [x] Visualización interactiva de mallas generadas con toggle ✅ **IMPLEMENTADO (US-06)**
 - [ ] Exportación de mallas en formatos .ply y .obj desde UI
 - [ ] Procesamiento asíncrono con Celery para nubes grandes (>100k puntos)
 - [ ] Preview en miniatura de la malla en la tarjeta
 - [ ] Downsampling automático para nubes muy grandes
-- [ ] Comparación lado a lado de nube de puntos vs malla
+- [ ] Comparación lado a lado de nube de puntos vs malla (split-screen)
 - [ ] Simplificación de mallas para reducir conteo de polígonos
 - [ ] Filtrado de densidades en Poisson para mejor calidad
 - [ ] Control de calidad de normales antes de reconstrucción
+- [ ] Level of Detail (LOD) para mallas muy grandes
+- [ ] Wireframe mode toggle para análisis de topología
+- [ ] Medición de distancias y áreas en las mallas
 
 
 
