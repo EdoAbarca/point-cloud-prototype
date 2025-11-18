@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import PointCloudViewer from "../components/PointCloudViewer";
+import MeshViewer from "../components/MeshViewer";
 
 export default function PointsView() {
     const [pointClouds, setPointClouds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedCloud, setSelectedCloud] = useState(null);
+    const [generatingMesh, setGeneratingMesh] = useState(null);
+    const [viewMode, setViewMode] = useState('cloud'); // 'cloud' or 'mesh'
+    const [alphaValue, setAlphaValue] = useState(1.0);
 
     const fetchPointClouds = async () => {
         try {
@@ -45,6 +49,41 @@ export default function PointsView() {
             fetchPointClouds();
         } catch (e) {
             alert(`Error: ${e.message}`);
+        }
+    };
+
+    const generateMesh = async (cloudId, alpha = 1.0) => {
+        setGeneratingMesh(cloudId);
+        setError(null);
+
+        try {
+            const response = await fetch(`http://localhost:8000/api/point_cloud/${cloudId}/triangulate`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ alpha }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || "Failed to generate mesh");
+            }
+
+            const data = await response.json();
+            
+            // Refresh the point cloud data
+            await fetchPointClouds();
+            
+            // Switch to mesh view
+            setViewMode('mesh');
+            
+            alert(`Mesh generated successfully!\nVertices: ${data.data.metadata.vertices.toLocaleString()}\nTriangles: ${data.data.metadata.triangles.toLocaleString()}\nTime: ${data.data.metadata.processing_time}s`);
+        } catch (e) {
+            setError(e.message);
+            alert(`Error generating mesh: ${e.message}`);
+        } finally {
+            setGeneratingMesh(null);
         }
     };
 
@@ -140,12 +179,36 @@ export default function PointsView() {
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={() => setSelectedCloud(cloud)}
-                                    className="mt-4 w-full bg-zinc-700 hover:bg-zinc-600 text-white py-2 rounded transition-colors text-sm"
-                                >
-                                    View Details
-                                </button>
+                                <div className="mt-4 flex gap-2">
+                                    <button
+                                        onClick={() => setSelectedCloud(cloud)}
+                                        className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white py-2 rounded transition-colors text-sm"
+                                    >
+                                        View Details
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setSelectedCloud(cloud);
+                                            setViewMode('cloud');
+                                        }}
+                                        disabled={generatingMesh === cloud.id}
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition-colors text-sm disabled:bg-blue-800 disabled:cursor-not-allowed"
+                                    >
+                                        {generatingMesh === cloud.id ? (
+                                            <span className="flex items-center justify-center">
+                                                <svg className="animate-spin h-4 w-4 mr-1" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                Generating...
+                                            </span>
+                                        ) : cloud.mesh_file ? (
+                                            "View Mesh"
+                                        ) : (
+                                            "Generate Mesh"
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -154,7 +217,10 @@ export default function PointsView() {
                 {selectedCloud && (
                     <div
                         className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
-                        onClick={() => setSelectedCloud(null)}
+                        onClick={() => {
+                            setSelectedCloud(null);
+                            setViewMode('cloud');
+                        }}
                     >
                         <div
                             className="bg-zinc-800 rounded-lg p-6 w-full h-full max-w-7xl max-h-[90vh] flex flex-col"
@@ -168,7 +234,10 @@ export default function PointsView() {
                                     </p>
                                 </div>
                                 <button
-                                    onClick={() => setSelectedCloud(null)}
+                                    onClick={() => {
+                                        setSelectedCloud(null);
+                                        setViewMode('cloud');
+                                    }}
                                     className="text-zinc-400 hover:text-white"
                                 >
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -177,12 +246,86 @@ export default function PointsView() {
                                 </button>
                             </div>
 
+                            {/* View Toggle and Controls */}
+                            <div className="flex gap-4 mb-4">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setViewMode('cloud')}
+                                        className={`px-4 py-2 rounded transition-colors ${
+                                            viewMode === 'cloud'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                                        }`}
+                                    >
+                                        Point Cloud
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (selectedCloud.mesh_file) {
+                                                setViewMode('mesh');
+                                            } else {
+                                                alert('Generate mesh first');
+                                            }
+                                        }}
+                                        className={`px-4 py-2 rounded transition-colors ${
+                                            viewMode === 'mesh'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                                        } ${!selectedCloud.mesh_file ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        disabled={!selectedCloud.mesh_file}
+                                    >
+                                        Mesh View
+                                    </button>
+                                </div>
+
+                                {viewMode === 'cloud' && (
+                                    <div className="flex items-center gap-2 ml-auto">
+                                        <label className="text-sm text-zinc-400">Alpha:</label>
+                                        <input
+                                            type="number"
+                                            min="0.1"
+                                            max="5"
+                                            step="0.1"
+                                            value={alphaValue}
+                                            onChange={(e) => setAlphaValue(parseFloat(e.target.value))}
+                                            className="w-20 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                        />
+                                        <button
+                                            onClick={() => generateMesh(selectedCloud.id, alphaValue)}
+                                            disabled={generatingMesh === selectedCloud.id}
+                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors text-sm disabled:bg-green-800 disabled:cursor-not-allowed"
+                                        >
+                                            {generatingMesh === selectedCloud.id ? (
+                                                <span className="flex items-center">
+                                                    <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    Generating...
+                                                </span>
+                                            ) : selectedCloud.mesh_file ? (
+                                                "Regenerate Mesh"
+                                            ) : (
+                                                "Generate Mesh"
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* 3D Visualization */}
                             <div className="flex-1 bg-zinc-900 rounded-lg overflow-hidden mb-4">
-                                <PointCloudViewer
-                                    pointCloudId={selectedCloud.id}
-                                    onError={(err) => setError(err)}
-                                />
+                                {viewMode === 'cloud' ? (
+                                    <PointCloudViewer
+                                        pointCloudId={selectedCloud.id}
+                                        onError={(err) => setError(err)}
+                                    />
+                                ) : (
+                                    <MeshViewer
+                                        pointCloudId={selectedCloud.id}
+                                        onError={(err) => setError(err)}
+                                    />
+                                )}
                             </div>
 
                             {/* Metadata Section */}

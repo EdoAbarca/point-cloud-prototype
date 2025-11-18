@@ -23,12 +23,14 @@ RUN apt-get update && apt-get install -y \
 # Copy dependency files first (for caching)
 COPY pyproject.toml requirements.txt ./
 
-# Install Python dependencies (including dev extras)
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -e ".[dev]"
+# Install Python dependencies from requirements.txt first
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the full project
+# Copy the full project (needed for editable install)
 COPY . .
+
+# Install the project in editable mode (including dev extras)
+RUN pip install --no-cache-dir -e ".[dev]"
 
 # Expose Django default port
 EXPOSE 8000
