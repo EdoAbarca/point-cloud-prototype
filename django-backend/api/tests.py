@@ -271,3 +271,134 @@ class PointCloudUploadTestCase(TestCase):
         self.assertIn('r', metadata['color_channels'])
         self.assertIn('g', metadata['color_channels'])
         self.assertIn('b', metadata['color_channels'])
+
+
+class PointCloudDataViewTestCase(TestCase):
+    """
+    Test cases for point cloud data retrieval endpoint (US-02).
+    """
+    
+    def setUp(self):
+        """
+        Set up test client and upload a test point cloud.
+        """
+        self.client = APIClient()
+        self.base_dir = Path(__file__).resolve().parent.parent.parent
+        self.test_files_dir = self.base_dir / 'figures'
+        
+        # Upload a test point cloud
+        test_file_path = self.test_files_dir / 'cube.pts'
+        with open(test_file_path, 'rb') as f:
+            file_content = f.read()
+        
+        uploaded_file = SimpleUploadedFile(
+            name='cube.pts',
+            content=file_content,
+            content_type='application/octet-stream'
+        )
+        
+        response = self.client.post(
+            '/api/point_cloud',
+            {'file': uploaded_file, 'name': 'Test Cube'},
+            format='multipart'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.point_cloud_id = response.data['data']['id']
+    
+    def tearDown(self):
+        """
+        Clean up uploaded files after each test.
+        """
+        for pc in PointCloud.objects.all():
+            if pc.file:
+                pc.file.delete()
+            pc.delete()
+    
+    def test_get_point_cloud_data(self):
+        """
+        Test successful retrieval of point cloud data for visualization.
+        """
+        response = self.client.get(f'/api/point_cloud/{self.point_cloud_id}/data')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check response structure
+        data = response.json()
+        self.assertIn('message', data)
+        self.assertIn('name', data)
+        self.assertIn('num_points', data)
+        self.assertIn('data', data)
+        
+        # Check data structure
+        point_data = data['data']
+        self.assertIn('positions', point_data)
+        self.assertIn('colors', point_data)
+        
+        # Verify positions and colors are arrays
+        self.assertIsInstance(point_data['positions'], list)
+        self.assertIsInstance(point_data['colors'], list)
+        
+        # Verify data is not empty
+        self.assertGreater(len(point_data['positions']), 0)
+        self.assertEqual(len(point_data['positions']), len(point_data['colors']))
+        
+        # Verify position format [x, y, z]
+        if len(point_data['positions']) > 0:
+            first_position = point_data['positions'][0]
+            self.assertEqual(len(first_position), 3)
+        
+        # Verify color format [r, g, b]
+        if len(point_data['colors']) > 0:
+            first_color = point_data['colors'][0]
+            self.assertEqual(len(first_color), 3)
+    
+    def test_get_point_cloud_data_with_sampling(self):
+        """
+        Test point cloud data retrieval with sampling parameter.
+        """
+        response = self.client.get(
+            f'/api/point_cloud/{self.point_cloud_id}/data?sample=0.5'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        data = response.json()
+        sampled_points = data['num_points']
+        
+        # Get full data to compare
+        full_response = self.client.get(f'/api/point_cloud/{self.point_cloud_id}/data')
+        full_data = full_response.json()
+        full_points = full_data['num_points']
+        
+        # Sampled points should be approximately 50% of full points
+        # (allow some variance due to random sampling)
+        self.assertLess(sampled_points, full_points)
+        self.assertGreater(sampled_points, full_points * 0.3)
+        self.assertLess(sampled_points, full_points * 0.7)
+    
+    def test_get_point_cloud_data_invalid_id(self):
+        """
+        Test retrieval with non-existent point cloud ID.
+        """
+        response = self.client.get('/api/point_cloud/99999/data')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        
+        data = response.json()
+        self.assertIn('error', data)
+    
+    def test_get_point_cloud_data_invalid_sample_parameter(self):
+        """
+        Test that invalid sampling parameters are handled gracefully.
+        """
+        # Invalid sample parameter should fall back to no sampling
+        response = self.client.get(
+            f'/api/point_cloud/{self.point_cloud_id}/data?sample=invalid'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Should return all points
+        data = response.json()
+        self.assertGreater(data['num_points'], 0)

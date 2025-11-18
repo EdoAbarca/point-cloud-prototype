@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import PointCloudViewer from "../components/PointCloudViewer";
 
 export default function PointsView() {
     const [pointClouds, setPointClouds] = useState([]);
@@ -156,11 +157,16 @@ export default function PointsView() {
                         onClick={() => setSelectedCloud(null)}
                     >
                         <div
-                            className="bg-zinc-800 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-auto"
+                            className="bg-zinc-800 rounded-lg p-6 w-full h-full max-w-7xl max-h-[90vh] flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <div className="flex justify-between items-start mb-4">
-                                <h2 className="text-2xl font-bold">{selectedCloud.name}</h2>
+                                <div>
+                                    <h2 className="text-2xl font-bold">{selectedCloud.name}</h2>
+                                    <p className="text-sm text-zinc-400 mt-1">
+                                        {selectedCloud.num_points.toLocaleString()} points
+                                    </p>
+                                </div>
                                 <button
                                     onClick={() => setSelectedCloud(null)}
                                     className="text-zinc-400 hover:text-white"
@@ -171,29 +177,39 @@ export default function PointsView() {
                                 </button>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <span className="text-zinc-400">ID:</span>
-                                        <p className="font-mono">{selectedCloud.id}</p>
-                                    </div>
-                                    <div>
-                                        <span className="text-zinc-400">Number of Points:</span>
-                                        <p className="font-mono">{selectedCloud.num_points.toLocaleString()}</p>
-                                    </div>
-                                    <div>
-                                        <span className="text-zinc-400">Upload Date:</span>
-                                        <p>{new Date(selectedCloud.upload_date).toLocaleString()}</p>
-                                    </div>
-                                </div>
+                            {/* 3D Visualization */}
+                            <div className="flex-1 bg-zinc-900 rounded-lg overflow-hidden mb-4">
+                                <PointCloudViewer
+                                    pointCloudId={selectedCloud.id}
+                                    onError={(err) => setError(err)}
+                                />
+                            </div>
 
-                                {selectedCloud.metadata && (
-                                    <div>
-                                        <h3 className="font-semibold mb-2">Metadata</h3>
-                                        <pre className="bg-zinc-900 p-4 rounded text-xs overflow-auto max-h-96">
-                                            {JSON.stringify(selectedCloud.metadata, null, 2)}
-                                        </pre>
-                                    </div>
+                            {/* Metadata Section */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                    <span className="text-zinc-400">ID:</span>
+                                    <p className="font-mono">{selectedCloud.id}</p>
+                                </div>
+                                <div>
+                                    <span className="text-zinc-400">Upload Date:</span>
+                                    <p className="text-xs">{new Date(selectedCloud.upload_date).toLocaleDateString()}</p>
+                                </div>
+                                {selectedCloud.metadata?.bounds && (
+                                    <>
+                                        <div>
+                                            <span className="text-zinc-400">Bounds X:</span>
+                                            <p className="font-mono text-xs">
+                                                [{selectedCloud.metadata.bounds.x.min.toFixed(2)}, {selectedCloud.metadata.bounds.x.max.toFixed(2)}]
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-zinc-400">Bounds Y:</span>
+                                            <p className="font-mono text-xs">
+                                                [{selectedCloud.metadata.bounds.y.min.toFixed(2)}, {selectedCloud.metadata.bounds.y.max.toFixed(2)}]
+                                            </p>
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         </div>
