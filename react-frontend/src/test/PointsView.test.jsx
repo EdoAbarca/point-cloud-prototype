@@ -1035,4 +1035,328 @@ describe('PointsView', () => {
       expect(screen.getByTestId('mesh-viewer')).toBeInTheDocument();
     }, { timeout: 3000 });
   });
+
+  describe('View Toggle Functionality (US-06)', () => {
+    it('displays toggle buttons for point cloud and mesh views', async () => {
+      const mockCloudWithMesh = {
+        ...mockPointClouds[0],
+        mesh_file: '/media/pointclouds/test_mesh.obj',
+        mesh_metadata: {
+          algorithm: 'delaunay',
+          vertices: 1000,
+          triangles: 2000
+        }
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockCloudWithMesh] })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      // Open modal
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText('Point Cloud')).toBeInTheDocument();
+        expect(screen.getByText('Mesh View')).toBeInTheDocument();
+      });
+    });
+
+    it('starts with point cloud view by default', async () => {
+      const mockCloudWithMesh = {
+        ...mockPointClouds[0],
+        mesh_file: '/media/pointclouds/test_mesh.obj',
+        mesh_metadata: {
+          algorithm: 'delaunay',
+          vertices: 1000,
+          triangles: 2000
+        }
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockCloudWithMesh] })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+        expect(screen.queryByTestId('mesh-viewer')).not.toBeInTheDocument();
+      });
+    });
+
+    it('toggles from point cloud to mesh view when mesh exists', async () => {
+      const mockCloudWithMesh = {
+        ...mockPointClouds[0],
+        mesh_file: '/media/pointclouds/test_mesh.obj',
+        mesh_metadata: {
+          algorithm: 'delaunay',
+          vertices: 1000,
+          triangles: 2000
+        }
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockCloudWithMesh] })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+      });
+
+      // Click Mesh View toggle button
+      const meshViewButton = screen.getByText('Mesh View');
+      fireEvent.click(meshViewButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mesh-viewer')).toBeInTheDocument();
+        expect(screen.queryByTestId('point-cloud-viewer')).not.toBeInTheDocument();
+      });
+    });
+
+    it('toggles back from mesh to point cloud view', async () => {
+      const mockCloudWithMesh = {
+        ...mockPointClouds[0],
+        mesh_file: '/media/pointclouds/test_mesh.obj',
+        mesh_metadata: {
+          algorithm: 'delaunay',
+          vertices: 1000,
+          triangles: 2000
+        }
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockCloudWithMesh] })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+      });
+
+      // Toggle to mesh view
+      const meshViewButton = screen.getByText('Mesh View');
+      fireEvent.click(meshViewButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mesh-viewer')).toBeInTheDocument();
+      });
+
+      // Toggle back to point cloud view
+      const pointCloudButton = screen.getByText('Point Cloud');
+      fireEvent.click(pointCloudButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+        expect(screen.queryByTestId('mesh-viewer')).not.toBeInTheDocument();
+      });
+    });
+
+    it('disables mesh view button when no mesh has been generated', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        const meshViewButton = screen.getByText('Mesh View');
+        expect(meshViewButton).toBeDisabled();
+      });
+    });
+
+    it('mesh view button is disabled when no mesh is generated', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        const meshViewButton = screen.getByText('Mesh View');
+        expect(meshViewButton).toBeDisabled();
+        expect(meshViewButton).toHaveClass('opacity-50', 'cursor-not-allowed');
+      });
+    });
+
+    it('displays mesh immediately after generation without page reload', async () => {
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: mockPointClouds })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            message: 'Delaunay mesh generated successfully',
+            data: {
+              mesh_file: 'test_delaunay.obj',
+              vertices: 1000,
+              triangles: 2000,
+              processing_time: 1.5,
+              algorithm: 'delaunay'
+            }
+          })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ 
+            data: [{
+              ...mockPointClouds[0],
+              mesh_file: '/media/pointclouds/test_delaunay.obj',
+              mesh_metadata: {
+                algorithm: 'delaunay',
+                vertices: 1000,
+                triangles: 2000
+              }
+            }]
+          })
+        });
+
+      global.alert = vi.fn();
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+      });
+
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+      });
+
+      // Generate mesh
+      const generateButtons = screen.getAllByText(/Generate Mesh/i);
+      fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+      // Should automatically switch to mesh view after generation
+      await waitFor(() => {
+        expect(screen.getByTestId('mesh-viewer')).toBeInTheDocument();
+        expect(screen.queryByTestId('point-cloud-viewer')).not.toBeInTheDocument();
+      }, { timeout: 3000 });
+    });
+
+    it('maintains toggle state when switching between multiple point clouds', async () => {
+      const mockCloudWithMesh1 = {
+        ...mockPointClouds[0],
+        mesh_file: '/media/pointclouds/test_mesh1.obj',
+        mesh_metadata: {
+          algorithm: 'delaunay',
+          vertices: 1000,
+          triangles: 2000
+        }
+      };
+
+      const mockCloudWithMesh2 = {
+        ...mockPointClouds[1],
+        mesh_file: '/media/pointclouds/test_mesh2.obj',
+        mesh_metadata: {
+          algorithm: 'poisson',
+          vertices: 1500,
+          triangles: 3000
+        }
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [mockCloudWithMesh1, mockCloudWithMesh2] })
+      });
+
+      renderWithRouter(<PointsView />);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+        expect(screen.getByText('Test Cloud 2')).toBeInTheDocument();
+      });
+
+      // Open first cloud
+      const viewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(viewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+      });
+
+      // Toggle to mesh view
+      const meshViewButton = screen.getByText('Mesh View');
+      fireEvent.click(meshViewButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mesh-viewer')).toBeInTheDocument();
+      });
+
+      // Close modal
+      const closeButtons = screen.getAllByRole('button');
+      const closeButton = closeButtons.find(btn => 
+        btn.querySelector('path[d*="M6 18L18 6M6 6l12 12"]')
+      );
+      fireEvent.click(closeButton);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('mesh-viewer')).not.toBeInTheDocument();
+      });
+
+      // Open second cloud - should start with point cloud view (default)
+      const newViewButtons = screen.getAllByText(/View Details/i);
+      fireEvent.click(newViewButtons[1]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+        expect(screen.queryByTestId('mesh-viewer')).not.toBeInTheDocument();
+      });
+    });
+  });
 });
