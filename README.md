@@ -485,20 +485,143 @@ Cada tarjeta de nube de puntos en la biblioteca incluye:
 - ✅ **Generada**: Botón "View Mesh" habilitado, switch entre vistas
 - ❌ **Error**: Mensaje de error descriptivo con opción de reintentar
 
+### US-04: Reconstrucción de Superficies con Algoritmo de Poisson (NEW)
+La aplicación ahora incluye soporte para reconstrucción de superficies cerradas y suaves mediante el algoritmo de Poisson, ideal para representar objetos sólidos con topología watertight.
+
+#### Características Principales
+- **Algoritmo Poisson**: Genera mallas cerradas mediante reconstrucción de superficies con Poisson
+- **Estimación automática de normales**: Calcula normales de la nube de puntos antes de la reconstrucción
+- **Parámetros ajustables**:
+  - **Depth (5-12)**: Profundidad del octree, controla el nivel de detalle (predeterminado: 9)
+    - **Depth bajo (5-7)**: Malla más gruesa, procesamiento rápido
+    - **Depth medio (8-9)**: Balance entre detalle y rendimiento (recomendado)
+    - **Depth alto (10-12)**: Malla muy detallada, procesamiento más lento
+  - **Radius (0.01-1.0)**: Radio de búsqueda para estimación de normales (predeterminado: 0.1)
+  - **Max NN (10-100)**: Máximo de vecinos cercanos considerados (predeterminado: 30)
+- **Mallas watertight**: Garantiza superficies cerradas sin huecos
+- **Visualización integrada**: Mismo visor 3D que Delaunay, con soporte para normales
+- **Selección de algoritmo**: Elige entre Delaunay y Poisson en la misma interfaz
+
+#### Cómo Usar la Reconstrucción Poisson
+
+##### Desde la Vista de Biblioteca (PointsView)
+1. Navega a "Visualizar nube de puntos"
+2. Haz clic en "View Details" en cualquier nube de puntos
+3. En el modal de detalles:
+   - Selecciona "**Poisson**" en el selector de algoritmo
+   - Ajusta los parámetros según necesites:
+     - **Depth**: Mayor valor = más detalle (puede ser más lento)
+     - **Radius**: Radio de búsqueda para calcular normales
+     - **Max NN**: Número de vecinos considerados
+   - Haz clic en "**Generate Mesh**" para iniciar la reconstrucción
+   - El proceso mostrará un spinner con estado "Generating..."
+   - Una vez completado, aparecerá una notificación con las estadísticas de la malla
+4. Para visualizar la malla generada:
+   - Haz clic en el botón "**Mesh View**" (habilitado después de generar)
+   - Alterna entre "Point Cloud" y "Mesh View" según necesites
+
+##### Comparación entre Delaunay y Poisson
+| Característica | Delaunay (Alpha Shapes) | Poisson Surface Reconstruction |
+|---------------|------------------------|--------------------------------|
+| **Tipo de malla** | Abierta, puede tener huecos | Cerrada, watertight |
+| **Mejor para** | Formas complejas, datos ruidosos | Objetos sólidos, superficies suaves |
+| **Parámetros** | Alpha (densidad) | Depth, Radius, Max NN |
+| **Tiempo de procesamiento** | Rápido (O(n log n)) | Moderado (depende de depth) |
+| **Estimación de normales** | Automática post-generación | Requerida pre-generación |
+| **Topología** | Puede tener discontinuidades | Siempre continua |
+
+#### Detalles Técnicos
+
+##### Backend (Django + Open3D)
+**Endpoints API:**
+- **POST** `/api/point_cloud/{id}/reconstruct_poisson`: Genera la malla Poisson
+  ```json
+  {
+    "depth": 9,      // Opcional, default 9 (rango: 5-12)
+    "radius": 0.1,   // Opcional, default 0.1
+    "max_nn": 30     // Opcional, default 30
+  }
+  ```
+  Respuesta:
+  ```json
+  {
+    "message": "Poisson mesh generated successfully",
+    "data": {
+      "mesh_file": "sphere_poisson.obj",
+      "vertices": 5234,
+      "triangles": 10468,
+      "processing_time": 3.2,
+      "algorithm": "poisson",
+      "depth": 9,
+      "radius": 0.1,
+      "max_nn": 30,
+      "has_normals": true
+    }
+  }
+  ```
+
+**Algoritmo:**
+1. Carga la nube de puntos con Open3D: `o3d.io.read_point_cloud()`
+2. Estima normales: `cloud.estimate_normals(search_param=KDTreeSearchParamHybrid(radius, max_nn))`
+3. Reconstrucción Poisson: `o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(cloud, depth)`
+4. Calcula normales de vértices: `poisson_mesh.compute_vertex_normals()`
+5. Guarda malla en formato `.obj`: `o3d.io.write_triangle_mesh(output_path, mesh)`
+
+**Validaciones:**
+- ✅ Mínimo 100 puntos requeridos para reconstrucción Poisson
+- ✅ Parámetros depth, radius, max_nn validados en backend
+- ✅ Verifica que la malla tenga normales calculadas
+- ✅ Manejo de errores con mensajes descriptivos (normales faltantes, puntos insuficientes)
+
+##### Frontend (React + Three.js)
+**Componentes modificados:**
+- `PointsView.jsx`: Interfaz actualizada con selector de algoritmo
+  - Muestra parámetros Delaunay (Alpha) o Poisson (Depth, Radius, Max NN) según selección
+  - Estado unificado para generación de mallas de ambos algoritmos
+  - Display de metadata de algoritmo usado en la malla generada
+
+**Flujo de UI:**
+1. Usuario selecciona algoritmo desde dropdown ("Delaunay" / "Poisson")
+2. Parámetros específicos aparecen dinámicamente según algoritmo
+3. Llamada a endpoint apropiado (`/triangulate` o `/reconstruct_poisson`)
+4. Misma lógica de visualización para ambos tipos de malla
+5. Metadata muestra algoritmo usado: "Mesh Algorithm: poisson"
+
 #### Ejemplos de Uso
 
-##### Generar malla con alpha predeterminado (1.0)
+##### Generar malla Delaunay con alpha predeterminado (1.0)
 ```bash
 curl -X POST http://localhost:8000/api/point_cloud/1/triangulate \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
 
-##### Generar malla con alpha personalizado (0.5 - más detallada)
+##### Generar malla Delaunay con alpha personalizado (0.5 - más detallada)
 ```bash
 curl -X POST http://localhost:8000/api/point_cloud/1/triangulate \
   -H "Content-Type: application/json" \
   -d '{"alpha": 0.5}'
+```
+
+##### Generar malla Poisson con parámetros predeterminados
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/reconstruct_poisson \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+##### Generar malla Poisson con alto detalle (depth=10)
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/reconstruct_poisson \
+  -H "Content-Type: application/json" \
+  -d '{"depth": 10, "radius": 0.05, "max_nn": 50}'
+```
+
+##### Generar malla Poisson con procesamiento rápido (depth=7)
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/reconstruct_poisson \
+  -H "Content-Type: application/json" \
+  -d '{"depth": 7, "radius": 0.15, "max_nn": 20}'
 ```
 
 ##### Obtener datos de malla para visualización
@@ -510,51 +633,90 @@ curl http://localhost:8000/api/point_cloud/1/mesh
 
 ##### Backend Tests (pytest)
 ```bash
-# Ejecutar tests de triangulación
+# Ejecutar todos los tests de backend
 make dev-test-backend
 
-# Tests específicos incluyen:
+# Tests de triangulación Delaunay incluyen:
 # - test_triangulate_point_cloud_success
 # - test_triangulate_with_custom_alpha
 # - test_triangulate_with_invalid_alpha
 # - test_get_mesh_data_success
 # - test_regenerate_mesh_overwrites_previous
+
+# Tests de reconstrucción Poisson incluyen:
+# - test_poisson_reconstruction_success
+# - test_poisson_with_default_parameters
+# - test_poisson_with_custom_depth
+# - test_poisson_with_invalid_depth
+# - test_poisson_with_invalid_radius
+# - test_poisson_creates_watertight_mesh
+# - test_poisson_performance_acceptable
+# - test_compare_poisson_with_delaunay
 ```
 
 ##### Frontend Tests (Vitest)
 ```bash
-# Ejecutar tests del MeshViewer
+# Ejecutar tests del frontend
 make dev-test-frontend
 
-# Tests específicos incluyen:
+# Tests del MeshViewer incluyen:
 # - Renderizado de estado de carga
 # - Fetch y display de datos de malla
 # - Manejo de errores (404, network)
 # - Display de metadatos de malla
+
+# Tests de PointsView incluyen:
+# - displays algorithm selector with Delaunay and Poisson options
+# - shows Poisson parameters when Poisson algorithm is selected
+# - shows Alpha parameter when Delaunay algorithm is selected
+# - generates Poisson mesh successfully
+# - generates Delaunay mesh successfully
+# - handles mesh generation error
+# - displays mesh metadata when mesh is generated
 ```
 
 #### Rendimiento y Optimización
 - ⚡ **Procesamiento asíncrono**: No bloquea la UI durante generación
 - 📊 **Métricas de tiempo**: Tracking automático del tiempo de procesamiento
-- 🎯 **Alpha Shapes**: Algoritmo O(n log n) para mallas grandes
+- 🎯 **Algoritmos optimizados**: 
+  - Delaunay Alpha Shapes: O(n log n) para mallas grandes
+  - Poisson: Complejidad depende del parámetro depth
 - 💾 **Persistencia**: Mallas generadas se guardan en disco y base de datos
 - 🔄 **Caché**: Regeneración solo si se solicita explícitamente
+- 🧮 **Estimación de normales eficiente**: KDTree híbrido para búsqueda rápida de vecinos
 
 #### Limitaciones Conocidas
-- Algoritmo Delaunay funciona mejor con distribuciones uniformes de puntos
+
+##### Delaunay (Alpha Shapes)
+- Funciona mejor con distribuciones uniformes de puntos
 - Puntos muy espaciados pueden generar triángulos grandes no deseados
 - Alpha muy bajo puede resultar en mallas fragmentadas
 - Alpha muy alto puede cubrir huecos que deberían estar vacíos
+- Puede generar mallas no cerradas (con huecos)
+
+##### Poisson Surface Reconstruction
+- Requiere mínimo 100 puntos para funcionar correctamente
+- Depth alto (>10) puede ser muy lento para nubes grandes
+- Puede suavizar detalles finos si depth es muy bajo
+- Genera mallas más pesadas (más triángulos) que Delaunay
+- Requiere estimación de normales (añade tiempo de procesamiento)
+
+##### General
 - Recomendado para nubes de puntos < 100,000 puntos por rendimiento
+- Procesamiento síncrono puede causar timeout en nubes muy grandes
+- Visualización de mallas muy grandes puede ser lenta en navegador
 
 #### Próximas Mejoras (Roadmap)
-- [ ] Soporte para algoritmo de reconstrucción Poisson
+- [x] Soporte para algoritmo de reconstrucción Poisson ✅ **IMPLEMENTADO**
 - [ ] Soporte para algoritmo de threshold mesh
-- [ ] Exportación de mallas en formatos .ply y .obj
-- [ ] Procesamiento asíncrono con Celery para nubes grandes
+- [ ] Exportación de mallas en formatos .ply y .obj desde UI
+- [ ] Procesamiento asíncrono con Celery para nubes grandes (>100k puntos)
 - [ ] Preview en miniatura de la malla en la tarjeta
 - [ ] Downsampling automático para nubes muy grandes
 - [ ] Comparación lado a lado de nube de puntos vs malla
+- [ ] Simplificación de mallas para reducir conteo de polígonos
+- [ ] Filtrado de densidades en Poisson para mejor calidad
+- [ ] Control de calidad de normales antes de reconstrucción
 
 
 

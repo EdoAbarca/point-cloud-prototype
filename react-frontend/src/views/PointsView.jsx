@@ -11,6 +11,10 @@ export default function PointsView() {
     const [generatingMesh, setGeneratingMesh] = useState(null);
     const [viewMode, setViewMode] = useState('cloud'); // 'cloud' or 'mesh'
     const [alphaValue, setAlphaValue] = useState(1.0);
+    const [meshAlgorithm, setMeshAlgorithm] = useState('delaunay'); // 'delaunay' or 'poisson'
+    const [poissonDepth, setPoissonDepth] = useState(9);
+    const [poissonRadius, setPoissonRadius] = useState(0.1);
+    const [poissonMaxNN, setPoissonMaxNN] = useState(30);
 
     const fetchPointClouds = async () => {
         try {
@@ -52,17 +56,33 @@ export default function PointsView() {
         }
     };
 
-    const generateMesh = async (cloudId, alpha = 1.0) => {
+    const generateMesh = async (cloudId, algorithm = 'delaunay', params = {}) => {
         setGeneratingMesh(cloudId);
         setError(null);
 
         try {
-            const response = await fetch(`http://localhost:8000/api/point_cloud/${cloudId}/triangulate`, {
+            let url, body;
+            
+            if (algorithm === 'delaunay') {
+                url = `http://localhost:8000/api/point_cloud/${cloudId}/triangulate`;
+                body = JSON.stringify({ alpha: params.alpha || 1.0 });
+            } else if (algorithm === 'poisson') {
+                url = `http://localhost:8000/api/point_cloud/${cloudId}/reconstruct_poisson`;
+                body = JSON.stringify({
+                    depth: params.depth || 9,
+                    radius: params.radius || 0.1,
+                    max_nn: params.max_nn || 30
+                });
+            } else {
+                throw new Error('Invalid algorithm');
+            }
+
+            const response = await fetch(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ alpha }),
+                body: body,
             });
 
             if (!response.ok) {
@@ -78,7 +98,8 @@ export default function PointsView() {
             // Switch to mesh view
             setViewMode('mesh');
             
-            alert(`Mesh generated successfully!\nVertices: ${data.data.metadata.vertices.toLocaleString()}\nTriangles: ${data.data.metadata.triangles.toLocaleString()}\nTime: ${data.data.metadata.processing_time}s`);
+            const algorithmName = algorithm === 'delaunay' ? 'Delaunay' : 'Poisson';
+            alert(`${algorithmName} mesh generated successfully!\nVertices: ${data.data.vertices.toLocaleString()}\nTriangles: ${data.data.triangles.toLocaleString()}\nTime: ${data.data.processing_time}s`);
         } catch (e) {
             setError(e.message);
             alert(`Error generating mesh: ${e.message}`);
@@ -279,19 +300,82 @@ export default function PointsView() {
                                 </div>
 
                                 {viewMode === 'cloud' && (
-                                    <div className="flex items-center gap-2 ml-auto">
-                                        <label className="text-sm text-zinc-400">Alpha:</label>
-                                        <input
-                                            type="number"
-                                            min="0.1"
-                                            max="5"
-                                            step="0.1"
-                                            value={alphaValue}
-                                            onChange={(e) => setAlphaValue(parseFloat(e.target.value))}
-                                            className="w-20 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
-                                        />
+                                    <div className="flex items-center gap-2 ml-auto flex-wrap">
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-sm text-zinc-400">Algorithm:</label>
+                                            <select
+                                                value={meshAlgorithm}
+                                                onChange={(e) => setMeshAlgorithm(e.target.value)}
+                                                className="px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                            >
+                                                <option value="delaunay">Delaunay</option>
+                                                <option value="poisson">Poisson</option>
+                                            </select>
+                                        </div>
+
+                                        {meshAlgorithm === 'delaunay' && (
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-sm text-zinc-400">Alpha:</label>
+                                                <input
+                                                    type="number"
+                                                    min="0.1"
+                                                    max="5"
+                                                    step="0.1"
+                                                    value={alphaValue}
+                                                    onChange={(e) => setAlphaValue(parseFloat(e.target.value))}
+                                                    className="w-20 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {meshAlgorithm === 'poisson' && (
+                                            <>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-sm text-zinc-400">Depth:</label>
+                                                    <input
+                                                        type="number"
+                                                        min="5"
+                                                        max="12"
+                                                        step="1"
+                                                        value={poissonDepth}
+                                                        onChange={(e) => setPoissonDepth(parseInt(e.target.value))}
+                                                        className="w-16 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-sm text-zinc-400">Radius:</label>
+                                                    <input
+                                                        type="number"
+                                                        min="0.01"
+                                                        max="1"
+                                                        step="0.01"
+                                                        value={poissonRadius}
+                                                        onChange={(e) => setPoissonRadius(parseFloat(e.target.value))}
+                                                        className="w-20 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-sm text-zinc-400">Max NN:</label>
+                                                    <input
+                                                        type="number"
+                                                        min="10"
+                                                        max="100"
+                                                        step="5"
+                                                        value={poissonMaxNN}
+                                                        onChange={(e) => setPoissonMaxNN(parseInt(e.target.value))}
+                                                        className="w-16 px-2 py-1 bg-zinc-700 text-white rounded text-sm"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+
                                         <button
-                                            onClick={() => generateMesh(selectedCloud.id, alphaValue)}
+                                            onClick={() => {
+                                                const params = meshAlgorithm === 'delaunay'
+                                                    ? { alpha: alphaValue }
+                                                    : { depth: poissonDepth, radius: poissonRadius, max_nn: poissonMaxNN };
+                                                generateMesh(selectedCloud.id, meshAlgorithm, params);
+                                            }}
                                             disabled={generatingMesh === selectedCloud.id}
                                             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors text-sm disabled:bg-green-800 disabled:cursor-not-allowed"
                                         >
@@ -338,6 +422,18 @@ export default function PointsView() {
                                     <span className="text-zinc-400">Upload Date:</span>
                                     <p className="text-xs">{new Date(selectedCloud.upload_date).toLocaleDateString()}</p>
                                 </div>
+                                {selectedCloud.mesh_metadata?.algorithm && (
+                                    <div>
+                                        <span className="text-zinc-400">Mesh Algorithm:</span>
+                                        <p className="font-mono text-xs capitalize">{selectedCloud.mesh_metadata.algorithm}</p>
+                                    </div>
+                                )}
+                                {selectedCloud.mesh_metadata?.vertices && (
+                                    <div>
+                                        <span className="text-zinc-400">Mesh Vertices:</span>
+                                        <p className="font-mono text-xs">{selectedCloud.mesh_metadata.vertices.toLocaleString()}</p>
+                                    </div>
+                                )}
                                 {selectedCloud.metadata?.bounds && (
                                     <>
                                         <div>

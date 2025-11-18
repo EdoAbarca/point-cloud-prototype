@@ -471,15 +471,14 @@ class PointCloudTriangulationTestCase(TestCase):
         self.assertIn('message', data)
         self.assertIn('data', data)
         self.assertIn('mesh_file', data['data'])
-        self.assertIn('metadata', data['data'])
         
-        # Verify metadata
-        metadata = data['data']['metadata']
-        self.assertEqual(metadata['algorithm'], 'delaunay')
-        self.assertEqual(metadata['alpha'], 1.0)
-        self.assertGreater(metadata['vertices'], 0)
-        self.assertGreater(metadata['triangles'], 0)
-        self.assertGreater(metadata['processing_time'], 0)
+        # Verify metadata in response
+        response_data = data['data']
+        self.assertEqual(response_data['algorithm'], 'delaunay')
+        self.assertEqual(response_data['alpha'], 1.0)
+        self.assertGreater(response_data['vertices'], 0)
+        self.assertGreater(response_data['triangles'], 0)
+        self.assertGreater(response_data['processing_time'], 0)
         
         # Verify point cloud object was updated
         point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
@@ -500,8 +499,8 @@ class PointCloudTriangulationTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         
         data = response.json()
-        metadata = data['data']['metadata']
-        self.assertEqual(metadata['alpha'], 0.5)
+        response_data = data['data']
+        self.assertEqual(response_data['alpha'], 0.5)
     
     def test_triangulate_with_default_alpha(self):
         """
@@ -516,8 +515,8 @@ class PointCloudTriangulationTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         
         data = response.json()
-        metadata = data['data']['metadata']
-        self.assertEqual(metadata['alpha'], 1.0)
+        response_data = data['data']
+        self.assertEqual(response_data['alpha'], 1.0)
     
     def test_triangulate_with_invalid_alpha(self):
         """
@@ -646,11 +645,301 @@ class PointCloudTriangulationTestCase(TestCase):
         )
         
         self.assertEqual(response2.status_code, status.HTTP_201_CREATED)
-        second_metadata = response2.json()['data']['metadata']
+        second_response_data = response2.json()['data']
         
         # Verify the alpha parameter was updated
-        self.assertEqual(second_metadata['alpha'], 0.5)
+        self.assertEqual(second_response_data['alpha'], 0.5)
         
         # Verify point cloud has the latest mesh metadata
         point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
         self.assertEqual(point_cloud.mesh_metadata['alpha'], 0.5)
+
+
+class PointCloudPoissonReconstructionTestCase(TestCase):
+    """
+    Test cases for Poisson surface reconstruction mesh generation functionality.
+    """
+    
+    def setUp(self):
+        """
+        Set up test client and upload a test point cloud.
+        """
+        self.client = APIClient()
+        
+        # Path to test files
+        self.base_dir = Path(__file__).resolve().parent.parent.parent
+        self.test_files_dir = self.base_dir / 'figures'
+        
+        # Upload a test point cloud
+        test_file_path = self.test_files_dir / 'sphere.pts'
+        
+        with open(test_file_path, 'rb') as f:
+            file_content = f.read()
+        
+        uploaded_file = SimpleUploadedFile(
+            'sphere.pts',
+            file_content,
+            content_type='application/octet-stream'
+        )
+        
+        upload_response = self.client.post(
+            '/api/point_cloud',
+            {'file': uploaded_file, 'name': 'Test Sphere'},
+            format='multipart'
+        )
+        
+        self.point_cloud_id = upload_response.data['data']['id']
+    
+    def tearDown(self):
+        """
+        Clean up uploaded files and generated meshes after each test.
+        """
+        for pc in PointCloud.objects.all():
+            if pc.file:
+                pc.file.delete()
+            if pc.mesh_file:
+                # Delete mesh file if it exists
+                try:
+                    if os.path.exists(pc.mesh_file.path):
+                        os.remove(pc.mesh_file.path)
+                except:
+                    pass
+            pc.delete()
+    
+    def test_poisson_reconstruction_success(self):
+        """
+        Test successful Poisson surface reconstruction of a point cloud.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 9, 'radius': 0.1, 'max_nn': 30},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        self.assertIn('message', data)
+        self.assertIn('data', data)
+        self.assertIn('mesh_file', data['data'])
+        
+        # Verify metadata
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['algorithm'], 'poisson')
+        self.assertEqual(mesh_data['depth'], 9)
+        self.assertEqual(mesh_data['radius'], 0.1)
+        self.assertEqual(mesh_data['max_nn'], 30)
+        self.assertGreater(mesh_data['vertices'], 0)
+        self.assertGreater(mesh_data['triangles'], 0)
+        self.assertGreater(mesh_data['processing_time'], 0)
+        self.assertTrue(mesh_data['has_normals'])
+        
+        # Verify point cloud object was updated
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertIsNotNone(point_cloud.mesh_file)
+        self.assertIsNotNone(point_cloud.mesh_metadata)
+        self.assertTrue(os.path.exists(point_cloud.mesh_file.path))
+        self.assertTrue(point_cloud.mesh_file.path.endswith('_poisson.obj'))
+    
+    def test_poisson_with_default_parameters(self):
+        """
+        Test that Poisson reconstruction uses default parameters when not provided.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['depth'], 9)
+        self.assertEqual(mesh_data['radius'], 0.1)
+        self.assertEqual(mesh_data['max_nn'], 30)
+    
+    def test_poisson_with_custom_depth(self):
+        """
+        Test Poisson reconstruction with custom depth parameter.
+        """
+        # Test with depth=8
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 8},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        self.assertEqual(data['data']['depth'], 8)
+    
+    def test_poisson_with_invalid_depth(self):
+        """
+        Test that Poisson reconstruction rejects invalid depth parameters.
+        """
+        # Depth too low
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 3},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+        
+        # Depth too high
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 15},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+    
+    def test_poisson_with_invalid_radius(self):
+        """
+        Test that Poisson reconstruction rejects invalid radius parameters.
+        """
+        # Negative radius
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'radius': -0.1},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+        
+        # Zero radius
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'radius': 0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+    
+    def test_poisson_with_invalid_max_nn(self):
+        """
+        Test that Poisson reconstruction rejects invalid max_nn parameters.
+        """
+        # Negative max_nn
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'max_nn': -10},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+    
+    def test_poisson_invalid_point_cloud_id(self):
+        """
+        Test Poisson reconstruction with non-existent point cloud ID.
+        """
+        response = self.client.post(
+            '/api/point_cloud/99999/reconstruct_poisson',
+            {'depth': 9},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.json())
+    
+    def test_poisson_with_varying_parameters(self):
+        """
+        Test Poisson reconstruction with different parameter combinations.
+        """
+        # Test with high detail (higher depth)
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 10, 'radius': 0.05, 'max_nn': 50},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        mesh_data = data['data']
+        self.assertEqual(mesh_data['depth'], 10)
+        self.assertEqual(mesh_data['radius'], 0.05)
+        self.assertEqual(mesh_data['max_nn'], 50)
+    
+    def test_poisson_creates_watertight_mesh(self):
+        """
+        Test that Poisson reconstruction creates a watertight mesh.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 9},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Verify that mesh has vertex normals (required for watertight mesh)
+        data = response.json()
+        self.assertTrue(data['data']['has_normals'])
+        
+        # Verify mesh data is retrievable
+        mesh_response = self.client.get(
+            f'/api/point_cloud/{self.point_cloud_id}/mesh'
+        )
+        
+        self.assertEqual(mesh_response.status_code, status.HTTP_200_OK)
+        mesh_data = mesh_response.json()['data']
+        self.assertIn('normals', mesh_data)
+        self.assertGreater(len(mesh_data['normals']), 0)
+    
+    def test_poisson_performance_acceptable(self):
+        """
+        Test that Poisson reconstruction completes in acceptable time.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 9},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        processing_time = data['data']['processing_time']
+        
+        # Assert processing time is reasonable (less than 30 seconds for test data)
+        self.assertLess(processing_time, 30.0)
+    
+    def test_compare_poisson_with_delaunay(self):
+        """
+        Test that both Poisson and Delaunay can be used on the same point cloud.
+        """
+        # Generate Delaunay mesh first
+        delaunay_response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(delaunay_response.status_code, status.HTTP_201_CREATED)
+        delaunay_data = delaunay_response.json()
+        self.assertEqual(delaunay_data['data']['algorithm'], 'delaunay')
+        
+        # Generate Poisson mesh (should overwrite)
+        poisson_response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/reconstruct_poisson',
+            {'depth': 9},
+            format='json'
+        )
+        
+        self.assertEqual(poisson_response.status_code, status.HTTP_201_CREATED)
+        poisson_data = poisson_response.json()
+        self.assertEqual(poisson_data['data']['algorithm'], 'poisson')
+        
+        # Verify the Poisson mesh is now stored
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertEqual(point_cloud.mesh_metadata['algorithm'], 'poisson')
+        self.assertTrue(point_cloud.mesh_file.path.endswith('_poisson.obj'))
