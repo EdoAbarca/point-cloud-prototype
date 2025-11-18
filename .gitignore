@@ -4,3 +4,5 @@ docs/
 # Jenkins
 .jenkins/
 jenkins-cli.jar
+
+.github/copilot-instructions.md

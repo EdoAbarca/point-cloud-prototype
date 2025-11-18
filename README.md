@@ -384,5 +384,177 @@ La aplicación ahora incluye un visor 3D interactivo con las siguientes funciona
   - Query parameter `sample`: Factor de muestreo opcional (ej. 0.5 para 50% de puntos)
   - Retorna posiciones [x, y, z] y colores [r, g, b] en formato JSON
 
+### US-03: Generación de Mallas 3D con Triangulación de Delaunay (NEW)
+La aplicación ahora soporta la generación automática de mallas 3D a partir de nubes de puntos utilizando el algoritmo de Delaunay (Alpha Shapes).
+
+#### Características Principales
+- **Algoritmo Delaunay**: Genera mallas tridimensionales mediante triangulación de Delaunay con Alpha Shapes
+- **Parámetro Alpha ajustable**: Control sobre la densidad de la malla (valores entre 0.1 y 5.0)
+  - **Alpha bajo (0.1 - 0.5)**: Malla más ajustada y detallada
+  - **Alpha medio (1.0)**: Balance entre detalle y cobertura (predeterminado)
+  - **Alpha alto (2.0 - 5.0)**: Malla más laxa, cubre mayor superficie
+- **Visualización dual**: Alterna entre vista de nube de puntos y malla generada
+- **Indicadores de progreso**: Loading spinner durante el procesamiento
+- **Estadísticas de malla**: Número de vértices, triángulos y tiempo de procesamiento
+- **Regeneración**: Permite regenerar la malla con diferentes parámetros alpha
+
+#### Cómo Usar la Generación de Mallas
+
+##### Desde la Vista de Biblioteca (PointsView)
+1. Navega a "Visualizar nube de puntos"
+2. Haz clic en "View Details" en cualquier nube de puntos
+3. En el modal de detalles:
+   - Ajusta el valor **Alpha** según el nivel de detalle deseado
+   - Haz clic en "**Generate Mesh**" para iniciar la triangulación
+   - El proceso mostrará un spinner con estado "Generating..."
+   - Una vez completado, aparecerá una notificación con las estadísticas de la malla
+4. Para visualizar la malla generada:
+   - Haz clic en el botón "**Mesh View**" (habilitado después de generar)
+   - Alterna entre "Point Cloud" y "Mesh View" según necesites
+
+##### Desde la Tarjeta de Nube de Puntos
+Cada tarjeta de nube de puntos en la biblioteca incluye:
+- Botón "**Generate Mesh**" si no existe malla
+- Botón "**View Mesh**" si ya fue generada
+- Indicador de estado durante la generación
+
+#### Detalles Técnicos
+
+##### Backend (Django + Open3D)
+**Endpoints API:**
+- **POST** `/api/point_cloud/{id}/triangulate`: Genera la malla Delaunay
+  ```json
+  {
+    "alpha": 1.0  // Opcional, default 1.0
+  }
+  ```
+  Respuesta:
+  ```json
+  {
+    "message": "Mesh generated successfully",
+    "data": {
+      "mesh_file": "cube_delaunay.obj",
+      "metadata": {
+        "algorithm": "delaunay",
+        "alpha": 1.0,
+        "vertices": 1234,
+        "triangles": 5678,
+        "processing_time": 2.5,
+        "generated_at": "2024-11-18 14:30:00"
+      }
+    }
+  }
+  ```
+
+- **GET** `/api/point_cloud/{id}/mesh`: Obtiene los datos de la malla para visualización
+  ```json
+  {
+    "message": "Mesh data retrieved successfully",
+    "name": "cube",
+    "metadata": {...},
+    "data": {
+      "vertices": [[x, y, z], ...],
+      "triangles": [[v1, v2, v3], ...],
+      "colors": [[r, g, b], ...]
+    }
+  }
+  ```
+
+**Algoritmo:**
+- Utiliza `Open3D` para la triangulación: `o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape()`
+- Calcula normales de vértices automáticamente para iluminación correcta
+- Guarda la malla en formato `.obj` en `media/pointclouds/`
+- Almacena metadatos en el campo `mesh_metadata` del modelo `PointCloud`
+
+**Validaciones:**
+- ✅ Mínimo 4 puntos requeridos para triangulación 3D
+- ✅ Parámetro alpha debe ser > 0
+- ✅ Verifica que la malla generada tenga vértices y triángulos
+- ✅ Manejo de errores con mensajes descriptivos
+
+##### Frontend (React + Three.js)
+**Componentes nuevos:**
+- `MeshViewer.jsx`: Visor 3D especializado para mallas
+  - Renderiza geometría con `THREE.BufferGeometry` y `THREE.Uint32Array` para índices
+  - Utiliza `meshPhongMaterial` con `vertexColors` para colores por vértice
+  - Iluminación con `ambientLight` y `directionalLight` para mejor visualización
+  - Soporte para `DoubleSide` rendering (ambas caras de los triángulos)
+
+**Estados de UI:**
+- 🔵 **Generando**: Spinner y botón deshabilitado durante procesamiento
+- ✅ **Generada**: Botón "View Mesh" habilitado, switch entre vistas
+- ❌ **Error**: Mensaje de error descriptivo con opción de reintentar
+
+#### Ejemplos de Uso
+
+##### Generar malla con alpha predeterminado (1.0)
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/triangulate \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+##### Generar malla con alpha personalizado (0.5 - más detallada)
+```bash
+curl -X POST http://localhost:8000/api/point_cloud/1/triangulate \
+  -H "Content-Type: application/json" \
+  -d '{"alpha": 0.5}'
+```
+
+##### Obtener datos de malla para visualización
+```bash
+curl http://localhost:8000/api/point_cloud/1/mesh
+```
+
+#### Pruebas
+
+##### Backend Tests (pytest)
+```bash
+# Ejecutar tests de triangulación
+make dev-test-backend
+
+# Tests específicos incluyen:
+# - test_triangulate_point_cloud_success
+# - test_triangulate_with_custom_alpha
+# - test_triangulate_with_invalid_alpha
+# - test_get_mesh_data_success
+# - test_regenerate_mesh_overwrites_previous
+```
+
+##### Frontend Tests (Vitest)
+```bash
+# Ejecutar tests del MeshViewer
+make dev-test-frontend
+
+# Tests específicos incluyen:
+# - Renderizado de estado de carga
+# - Fetch y display de datos de malla
+# - Manejo de errores (404, network)
+# - Display de metadatos de malla
+```
+
+#### Rendimiento y Optimización
+- ⚡ **Procesamiento asíncrono**: No bloquea la UI durante generación
+- 📊 **Métricas de tiempo**: Tracking automático del tiempo de procesamiento
+- 🎯 **Alpha Shapes**: Algoritmo O(n log n) para mallas grandes
+- 💾 **Persistencia**: Mallas generadas se guardan en disco y base de datos
+- 🔄 **Caché**: Regeneración solo si se solicita explícitamente
+
+#### Limitaciones Conocidas
+- Algoritmo Delaunay funciona mejor con distribuciones uniformes de puntos
+- Puntos muy espaciados pueden generar triángulos grandes no deseados
+- Alpha muy bajo puede resultar en mallas fragmentadas
+- Alpha muy alto puede cubrir huecos que deberían estar vacíos
+- Recomendado para nubes de puntos < 100,000 puntos por rendimiento
+
+#### Próximas Mejoras (Roadmap)
+- [ ] Soporte para algoritmo de reconstrucción Poisson
+- [ ] Soporte para algoritmo de threshold mesh
+- [ ] Exportación de mallas en formatos .ply y .obj
+- [ ] Procesamiento asíncrono con Celery para nubes grandes
+- [ ] Preview en miniatura de la malla en la tarjeta
+- [ ] Downsampling automático para nubes muy grandes
+- [ ] Comparación lado a lado de nube de puntos vs malla
+
 
 
