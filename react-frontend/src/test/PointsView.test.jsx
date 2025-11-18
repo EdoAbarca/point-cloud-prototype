@@ -342,11 +342,12 @@ describe('PointsView', () => {
       const algorithmSelect = screen.getByDisplayValue('Delaunay');
       expect(algorithmSelect).toBeInTheDocument();
       
-      // Check that both options are available
+      // Check that all algorithm options are available (Delaunay, Poisson, Threshold)
       const options = within(algorithmSelect.parentElement).getAllByRole('option');
-      expect(options.length).toBe(2);
+      expect(options.length).toBe(3);
       expect(options[0]).toHaveValue('delaunay');
       expect(options[1]).toHaveValue('poisson');
+      expect(options[2]).toHaveValue('threshold');
     });
   });
 
@@ -628,5 +629,410 @@ describe('PointsView', () => {
       expect(screen.getByText('Mesh Vertices:')).toBeInTheDocument();
       expect(screen.getByText('5,000')).toBeInTheDocument();
     });
+  });
+
+  it('displays threshold algorithm option in algorithm selector', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Find algorithm selector (it's a select without proper htmlFor association)
+    const selects = screen.getAllByRole('combobox');
+    const algorithmSelector = selects.find(select => select.value === 'delaunay' || select.value === 'poisson' || select.value === 'threshold');
+    expect(algorithmSelector).toBeInTheDocument();
+
+    // Check if threshold option is available
+    const thresholdOption = within(algorithmSelector).getByText('Threshold');
+    expect(thresholdOption).toBeInTheDocument();
+  });
+
+  it('shows threshold parameter controls when threshold algorithm is selected', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Select threshold algorithm
+    const selects = screen.getAllByRole("combobox"); const algorithmSelector = selects[0];
+    fireEvent.change(algorithmSelector, { target: { value: 'threshold' } });
+
+    await waitFor(() => {
+      // Check for threshold-specific controls
+      const thresholdInputs = screen.getAllByRole("slider"); expect(thresholdInputs.length).toBeGreaterThan(0);
+      
+      // Check that both Alpha and Threshold controls are present
+      const alphaLabels = screen.getAllByText(/Alpha:/i);
+      expect(alphaLabels.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('successfully generates threshold mesh with default parameters', async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: 'Threshold mesh generated successfully',
+          data: {
+            mesh_file: 'test_threshold.obj',
+            vertices: 3500,
+            triangles: 7000,
+            processing_time: 2.5,
+            algorithm: 'threshold',
+            threshold: 0.5,
+            alpha: 1.0,
+            filtering_stats: {
+              points_original: 24000,
+              points_filtered: 18000,
+              points_removed: 6000,
+              removal_percentage: 25.0
+            }
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ 
+          data: [{
+            ...mockPointClouds[0],
+            mesh_file: '/media/pointclouds/test_threshold.obj',
+            mesh_metadata: {
+              algorithm: 'threshold',
+              vertices: 3500,
+              triangles: 7000
+            }
+          }]
+        })
+      });
+
+    global.alert = vi.fn();
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Select threshold algorithm
+    const selects = screen.getAllByRole("combobox"); const algorithmSelector = selects[0];
+    fireEvent.change(algorithmSelector, { target: { value: 'threshold' } });
+
+    await waitFor(() => {
+      const thresholdInputs = screen.getAllByRole("slider"); expect(thresholdInputs.length).toBeGreaterThan(0);
+    });
+
+    // Click generate mesh button
+    const generateButtons = screen.getAllByText(/Generate Mesh/i);
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/api/point_cloud/1/threshold',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            threshold: 0.5,
+            alpha: 1.0
+          })
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Threshold mesh generated successfully')
+      );
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Filtering Stats')
+      );
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Original Points: 24,000')
+      );
+      expect(global.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Removed: 6,000 (25%)')
+      );
+    });
+  });
+
+  it('allows adjusting threshold parameter via slider', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Select threshold algorithm
+    const selects = screen.getAllByRole("combobox"); const algorithmSelector = selects[0];
+    fireEvent.change(algorithmSelector, { target: { value: 'threshold' } });
+
+    await waitFor(() => {
+      const thresholdInputs = screen.getAllByRole("slider"); expect(thresholdInputs.length).toBeGreaterThan(0);
+    });
+
+    // Find and adjust the threshold slider
+    const thresholdSlider = screen.getByRole("slider");
+    fireEvent.change(thresholdSlider, { target: { value: '1.2' } });
+
+    await waitFor(() => {
+      // Check that the value display updated
+      expect(screen.getByText('1.2')).toBeInTheDocument();
+    });
+  });
+
+  it('generates threshold mesh with custom parameters', async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: 'Threshold mesh generated successfully',
+          data: {
+            mesh_file: 'test_threshold.obj',
+            vertices: 2500,
+            triangles: 5000,
+            processing_time: 1.8,
+            algorithm: 'threshold',
+            threshold: 1.5,
+            alpha: 2.0,
+            filtering_stats: {
+              points_original: 24000,
+              points_filtered: 12000,
+              points_removed: 12000,
+              removal_percentage: 50.0
+            }
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      });
+
+    global.alert = vi.fn();
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Select threshold algorithm
+    const selects = screen.getAllByRole("combobox"); const algorithmSelector = selects[0];
+    fireEvent.change(algorithmSelector, { target: { value: 'threshold' } });
+
+    await waitFor(() => {
+      const thresholdInputs = screen.getAllByRole("slider"); expect(thresholdInputs.length).toBeGreaterThan(0);
+    });
+
+    // Set custom threshold value
+    const thresholdSlider = screen.getByRole("slider");
+    fireEvent.change(thresholdSlider, { target: { value: '1.5' } });
+
+    // Set custom alpha value
+    const alphaInputs = screen.getAllByRole("spinbutton"); // number inputs
+    const thresholdAlphaInput = alphaInputs[alphaInputs.length - 1];
+    fireEvent.change(thresholdAlphaInput, { target: { value: '2.0' } });
+
+    // Click generate mesh button
+    const generateButtons = screen.getAllByText(/Generate Mesh/i);
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/api/point_cloud/1/threshold',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            threshold: 1.5,
+            alpha: 2.0
+          })
+        })
+      );
+    });
+  });
+
+  it('displays threshold mesh metadata including filtering statistics', async () => {
+    const mockCloudWithThresholdMesh = {
+      ...mockPointClouds[0],
+      mesh_file: '/media/pointclouds/test_threshold.obj',
+      mesh_metadata: {
+        algorithm: 'threshold',
+        vertices: 3500,
+        triangles: 7000,
+        threshold: 0.8,
+        alpha: 1.2,
+        points_original: 24000,
+        points_filtered: 18000,
+        points_removed: 6000,
+        removal_percentage: 25.0
+      }
+    };
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: [mockCloudWithThresholdMesh] })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      // Check for threshold-specific metadata
+      expect(screen.getByText('Mesh Algorithm:')).toBeInTheDocument();
+      expect(screen.getByText('threshold')).toBeInTheDocument();
+      expect(screen.getByText('Points Filtered:')).toBeInTheDocument();
+      expect(screen.getByText('Removed:')).toBeInTheDocument();
+      expect(screen.getByText('25%')).toBeInTheDocument();
+    });
+  });
+
+  it('switches to mesh view after successful threshold mesh generation', async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockPointClouds })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: 'Threshold mesh generated successfully',
+          data: {
+            mesh_file: 'test_threshold.obj',
+            vertices: 3500,
+            triangles: 7000,
+            processing_time: 2.5,
+            algorithm: 'threshold',
+            threshold: 0.5,
+            alpha: 1.0,
+            filtering_stats: {
+              points_original: 24000,
+              points_filtered: 18000,
+              points_removed: 6000,
+              removal_percentage: 25.0
+            }
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ 
+          data: [{
+            ...mockPointClouds[0],
+            mesh_file: '/media/pointclouds/test_threshold.obj',
+            mesh_metadata: {
+              algorithm: 'threshold',
+              vertices: 3500,
+              triangles: 7000
+            }
+          }]
+        })
+      });
+
+    global.alert = vi.fn();
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    // Open modal
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+
+    // Select threshold algorithm
+    const selects = screen.getAllByRole("combobox"); const algorithmSelector = selects[0];
+    fireEvent.change(algorithmSelector, { target: { value: 'threshold' } });
+
+    await waitFor(() => {
+      const thresholdInputs = screen.getAllByRole("slider"); expect(thresholdInputs.length).toBeGreaterThan(0);
+    });
+
+    // Generate mesh
+    const generateButtons = screen.getAllByText(/Generate Mesh/i);
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
+
+    // Wait for mesh to be generated and view to switch
+    await waitFor(() => {
+      expect(screen.getByTestId('mesh-viewer')).toBeInTheDocument();
+    }, { timeout: 3000 });
   });
 });
