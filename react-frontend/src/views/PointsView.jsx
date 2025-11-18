@@ -1,110 +1,204 @@
 import { useState, useEffect } from "react";
-import * as THREE from "three";
+import { Link } from "react-router-dom";
 
 export default function PointsView() {
-    const [filePath, setFilePath] = useState("");
-    const [pointCloud, setPointCloud] = useState(null);
+    const [pointClouds, setPointClouds] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [selectedCloud, setSelectedCloud] = useState(null);
 
-    const fetchPointCloud = async (path) => {
+    const fetchPointClouds = async () => {
         try {
-            // Todo: Solo leer rutas de archivos .pts
-            const response = await fetch(`http://localhost:8000/api/send/poind-cloud?filepath=${encodeURIComponent(path)}`);
+            setLoading(true);
+            const response = await fetch("http://localhost:8000/api/point_cloud");
 
             if (!response.ok) {
                 throw new Error(`Error: ${response.status} - ${response.statusText}`);
             }
 
             const data = await response.json();
-            setPointCloud(data.point_clouds[0]);
+            setPointClouds(data.data || []);
+            setError(null);
         } catch (e) {
             setError(e.message);
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleFilePathSubmit = () => {
-        if (filePath.trim() === "") {
-            setError("Por favor, ingresa una ruta válida para el archivo.");
+    const deletePointCloud = async (id) => {
+        if (!confirm("Are you sure you want to delete this point cloud?")) {
             return;
         }
 
-        setError(null);
-        fetchPointCloud(filePath);
-    };
+        try {
+            const response = await fetch(`http://localhost:8000/api/point_cloud/${id}`, {
+                method: "DELETE",
+            });
 
-    const renderPointCloud = () => {
-        if (!pointCloud) return;
+            if (!response.ok) {
+                throw new Error("Failed to delete point cloud");
+            }
 
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById("point-cloud-viewer").appendChild(renderer.domElement);
-
-        const geometry = new THREE.BufferGeometry();
-        const vertices = new Float32Array(pointCloud.point_cloud.flat());
-        geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-
-        const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05 });
-        const points = new THREE.Points(geometry, material);
-
-        scene.add(points);
-        camera.position.z = 5;
-
-        const animate = () => {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        };
-
-        animate();
+            // Refresh the list
+            fetchPointClouds();
+        } catch (e) {
+            alert(`Error: ${e.message}`);
+        }
     };
 
     useEffect(() => {
-        if (pointCloud) {
-            renderPointCloud();
-        }
-    }, [pointCloud]);
+        fetchPointClouds();
+    }, []);
 
     return (
-        <div className="p-6">
-            <div className="bg-white shadow rounded-lg p-6">
-                <h1 className="text-xl font-bold mb-4">Visualización de Nubes de Puntos</h1>
-
-                <div className="flex items-center gap-4 mb-4">
-                    <input
-                        type="text"
-                        placeholder="Ruta absoluta del archivo .pts"
-                        value={filePath}
-                        onChange={(e) => setFilePath(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded"
-                    />
-                    <button onClick={handleFilePathSubmit} className="bg-blue-500 text-white px-4 py-2 rounded">
-                        Cargar
-                    </button>
+        <div className="min-h-screen bg-zinc-900 text-white p-8">
+            <div className="max-w-6xl mx-auto">
+                <div className="mb-6 flex justify-between items-center">
+                    <Link to="/" className="text-blue-400 hover:text-blue-300 underline">
+                        ← Back to Home
+                    </Link>
+                    <Link
+                        to="/create-mesh"
+                        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                    >
+                        + Upload New Point Cloud
+                    </Link>
                 </div>
 
-                {error && <p className="text-red-500">{error}</p>}
-                {!error && pointCloud && (
-                    <p className="text-green-500">Nube de puntos cargada correctamente.</p>
+                <h1 className="text-3xl font-bold mb-6">Point Cloud Library</h1>
+                <p className="text-zinc-400 mb-8">
+                    View and manage all uploaded point cloud files.
+                </p>
+
+                {loading && (
+                    <div className="flex items-center justify-center py-12">
+                        <svg className="animate-spin h-8 w-8 text-blue-500" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="ml-3">Loading point clouds...</span>
+                    </div>
                 )}
 
-                <div>
-                    <button
-                        onClick={() => document.getElementById("dialog").showModal()}
-                        disabled={!pointCloud}
-                        className={`bg-blue-500 text-white px-4 py-2 rounded ${!pointCloud ? "opacity-50 cursor-not-allowed" : ""}`}
+                {error && (
+                    <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded">
+                        <p className="font-semibold">Error:</p>
+                        <p>{error}</p>
+                    </div>
+                )}
+
+                {!loading && !error && pointClouds.length === 0 && (
+                    <div className="bg-zinc-800 rounded-lg p-8 text-center">
+                        <p className="text-zinc-400 mb-4">No point clouds uploaded yet.</p>
+                        <Link
+                            to="/create-mesh"
+                            className="inline-block bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600"
+                        >
+                            Upload Your First Point Cloud
+                        </Link>
+                    </div>
+                )}
+
+                {!loading && !error && pointClouds.length > 0 && (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {pointClouds.map((cloud) => (
+                            <div
+                                key={cloud.id}
+                                className="bg-zinc-800 rounded-lg p-6 hover:bg-zinc-750 transition-colors"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="text-lg font-semibold truncate flex-1">
+                                        {cloud.name}
+                                    </h3>
+                                    <button
+                                        onClick={() => deletePointCloud(cloud.id)}
+                                        className="text-red-400 hover:text-red-300 ml-2"
+                                        title="Delete"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-zinc-400">Points:</span>
+                                        <span className="font-mono">{cloud.num_points.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-zinc-400">Uploaded:</span>
+                                        <span className="text-xs">
+                                            {new Date(cloud.upload_date).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-zinc-400">ID:</span>
+                                        <span className="font-mono text-xs">{cloud.id}</span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => setSelectedCloud(cloud)}
+                                    className="mt-4 w-full bg-zinc-700 hover:bg-zinc-600 text-white py-2 rounded transition-colors text-sm"
+                                >
+                                    View Details
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {selectedCloud && (
+                    <div
+                        className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+                        onClick={() => setSelectedCloud(null)}
                     >
-                        Visualizar
-                    </button>
-                    <dialog id="dialog" className="w-[800px] h-[600px] p-0">
-                        <div className="w-full h-full">
-                            <div id="point-cloud-viewer" className="w-full h-full"></div>
+                        <div
+                            className="bg-zinc-800 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-auto"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex justify-between items-start mb-4">
+                                <h2 className="text-2xl font-bold">{selectedCloud.name}</h2>
+                                <button
+                                    onClick={() => setSelectedCloud(null)}
+                                    className="text-zinc-400 hover:text-white"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="text-zinc-400">ID:</span>
+                                        <p className="font-mono">{selectedCloud.id}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-zinc-400">Number of Points:</span>
+                                        <p className="font-mono">{selectedCloud.num_points.toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-zinc-400">Upload Date:</span>
+                                        <p>{new Date(selectedCloud.upload_date).toLocaleString()}</p>
+                                    </div>
+                                </div>
+
+                                {selectedCloud.metadata && (
+                                    <div>
+                                        <h3 className="font-semibold mb-2">Metadata</h3>
+                                        <pre className="bg-zinc-900 p-4 rounded text-xs overflow-auto max-h-96">
+                                            {JSON.stringify(selectedCloud.metadata, null, 2)}
+                                        </pre>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <button onClick={() => document.getElementById("dialog").close()} className="absolute top-2 right-2">
-                            Close
-                        </button>
-                    </dialog>
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     );
