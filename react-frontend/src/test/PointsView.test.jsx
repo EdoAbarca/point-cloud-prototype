@@ -6,6 +6,15 @@ import PointsView from '../views/PointsView';
 // Mock fetch
 global.fetch = vi.fn();
 
+// Mock PointCloudViewer component
+vi.mock('../components/PointCloudViewer', () => ({
+  default: ({ pointCloudId, onError }) => (
+    <div data-testid="point-cloud-viewer">
+      Point Cloud Viewer - ID: {pointCloudId}
+    </div>
+  ),
+}));
+
 const renderWithRouter = (component) => {
   return render(<BrowserRouter>{component}</BrowserRouter>);
 };
@@ -110,11 +119,34 @@ describe('PointsView', () => {
     const viewButtons = screen.getAllByText(/View Details/i);
     fireEvent.click(viewButtons[0]);
 
-    // Modal should display the cloud name and "Number of Points" label
+    // Modal should display the cloud name and point cloud viewer
     await waitFor(() => {
       const allTitles = screen.getAllByText('Test Cloud 1');
       expect(allTitles.length).toBeGreaterThan(1); // One in card, one in modal
-      expect(screen.getByText(/Number of Points:/i)).toBeInTheDocument();
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
+    });
+  });
+
+  it('displays point cloud visualization in modal', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: mockPointClouds })
+    });
+
+    renderWithRouter(<PointsView />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Test Cloud 1')).toBeInTheDocument();
+    });
+
+    const viewButtons = screen.getAllByText(/View Details/i);
+    fireEvent.click(viewButtons[0]);
+
+    // Verify the viewer component is rendered with correct ID
+    await waitFor(() => {
+      const viewer = screen.getByTestId('point-cloud-viewer');
+      expect(viewer).toBeInTheDocument();
+      expect(viewer).toHaveTextContent('Point Cloud Viewer - ID: 1');
     });
   });
 
@@ -134,7 +166,7 @@ describe('PointsView', () => {
     fireEvent.click(viewButtons[0]);
 
     await waitFor(() => {
-      expect(screen.getByText(/Number of Points:/i)).toBeInTheDocument();
+      expect(screen.getByTestId('point-cloud-viewer')).toBeInTheDocument();
     });
 
     // Close button is an X icon button, click the modal close button area
@@ -145,7 +177,7 @@ describe('PointsView', () => {
     fireEvent.click(closeButton);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Number of Points:/i)).not.toBeInTheDocument();
+      expect(screen.queryByTestId('point-cloud-viewer')).not.toBeInTheDocument();
     });
   });
 
@@ -256,7 +288,7 @@ describe('PointsView', () => {
     });
   });
 
-  it('displays metadata in detail modal', async () => {
+  it('displays bounds metadata in detail modal when available', async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: mockPointClouds })
@@ -272,10 +304,13 @@ describe('PointsView', () => {
     fireEvent.click(viewButtons[0]);
 
     await waitFor(() => {
-      expect(screen.getByText('Metadata')).toBeInTheDocument();
-      // Check that the metadata object structure is rendered
-      const modalContent = screen.getByText('Metadata').closest('div').parentElement;
-      expect(modalContent.textContent).toContain('bounds');
+      // Verify modal is open by checking for ID and Upload Date which are always shown
+      expect(screen.getAllByText('ID:').length).toBeGreaterThan(1); // One in card, one in modal
+      expect(screen.getAllByText('Upload Date:').length).toBeGreaterThan(0);
+      
+      // For Test Cloud 1, bounds should be displayed
+      expect(screen.getByText('Bounds X:')).toBeInTheDocument();
+      expect(screen.getByText('Bounds Y:')).toBeInTheDocument();
     });
   });
 });
