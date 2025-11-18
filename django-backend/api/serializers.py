@@ -13,8 +13,8 @@ class PointCloudSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = PointCloud
-        fields = ['id', 'name', 'file', 'upload_date', 'num_points', 'metadata']
-        read_only_fields = ['id', 'upload_date', 'num_points', 'metadata']
+        fields = ['id', 'name', 'file', 'upload_date', 'num_points', 'metadata', 'mesh_file', 'mesh_metadata']
+        read_only_fields = ['id', 'upload_date', 'num_points', 'metadata', 'mesh_file', 'mesh_metadata']
     
     def validate_file(self, value):
         """

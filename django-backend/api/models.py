@@ -10,6 +10,8 @@ class PointCloud(models.Model):
     upload_date = models.DateTimeField(auto_now_add=True, help_text="Timestamp when the file was uploaded")
     num_points = models.IntegerField(help_text="Total number of points in the cloud")
     metadata = models.JSONField(default=dict, blank=True, help_text="Additional metadata (bounds, intensity range, etc.)")
+    mesh_file = models.FileField(upload_to='pointclouds/', blank=True, null=True, help_text="Path to generated mesh file (.obj)")
+    mesh_metadata = models.JSONField(default=dict, blank=True, help_text="Mesh metadata (vertices count, triangles count, algorithm used)")
     
     class Meta:
         ordering = ['-upload_date']
