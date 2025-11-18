@@ -1254,10 +1254,301 @@ python manage.py test api.tests.PointCloudTriangulateTestCase
 - Mallas muy grandes pueden causar lag en dispositivos antiguos
 - Recomendado: generar mallas con menos detalle para móviles
 
+### US-07: Controles Avanzados de Interacción 3D para Mallas (NEW)
+La aplicación ahora incluye controles avanzados de cámara e interacción mejorados para la visualización de mallas 3D, permitiendo una inspección detallada de la calidad de las superficies generadas.
+
+#### Características Principales
+- **Controles de cámara completos**: Rotación, zoom y pan suaves e intuitivos
+- **Botón de reseteo de vista**: Restaura la cámara a la posición y orientación inicial
+- **Toggle de visibilidad**: Alterna entre malla, nube de puntos y vista combinada
+- **Controles de helpers**: Muestra/oculta grid y ejes coordenados
+- **Atajos de teclado**: Controles rápidos para todas las funciones principales
+- **OrbitControls mejorados**: Configuración optimizada para mejor experiencia de usuario
+- **Vista responsiva**: Funciona consistentemente en desktop y dispositivos móviles
+- **Performance optimizado**: Mantiene 60 FPS para mallas típicas (<1M caras)
+
+#### Controles Interactivos
+
+##### Controles de Cámara
+| Acción | Mouse/Trackpad | Teclado | Móvil |
+|--------|---------------|---------|-------|
+| **Rotar** | Click izquierdo + arrastrar | - | Un dedo + arrastrar |
+| **Zoom** | Rueda del mouse | - | Pinch (dos dedos) |
+| **Pan** | Click derecho + arrastrar | - | Dos dedos + arrastrar |
+| **Reset View** | Botón "Reset View" | `R` | Botón "Reset View" |
+
+##### Modos de Visualización
+| Modo | Descripción | Atajo |
+|------|-------------|-------|
+| **Mesh** | Muestra solo la malla 3D | `M` |
+| **Points** | Muestra solo la nube de puntos (30% sample) | `P` |
+| **Both** | Muestra malla y nube de puntos simultáneamente | `B` |
+
+##### Helpers Visuales
+| Helper | Descripción | Atajo |
+|--------|-------------|-------|
+| **Grid** | Rejilla de referencia en el plano XY | `G` |
+| **Axes** | Ejes coordenados (X: rojo, Y: verde, Z: azul) | `A` |
+
+#### Cómo Usar los Controles Avanzados
+
+##### Inspección Básica de Mallas
+1. Abre una malla en el visor 3D
+2. **Rotar**: Click izquierdo + arrastrar para examinar desde diferentes ángulos
+3. **Zoom**: Rueda del mouse para acercar/alejar a áreas específicas
+4. **Pan**: Click derecho + arrastrar para reposicionar la vista
+5. **Reset**: Presiona `R` o botón "Reset View" para volver a vista inicial
+
+##### Comparación Malla vs Puntos Originales
+1. Abre una malla generada en el visor
+2. Por defecto se muestra en modo "**Mesh**"
+3. Haz clic en "**Points**" o presiona `P` para ver la nube de puntos original
+4. Haz clic en "**Both**" o presiona `B` para ver ambas superposiciones
+5. Compara visualmente la fidelidad de la reconstrucción
+6. Alterna entre modos para análisis detallado
+
+##### Uso de Helpers para Referencia Espacial
+1. El **Grid** ayuda a entender la escala y orientación
+2. Los **Axes** muestran las direcciones X, Y, Z
+3. Presiona `G` para toggle del grid
+4. Presiona `A` para toggle de los ejes
+5. Útil para identificar orientación de objetos escaneados
+
+##### Atajos de Teclado Rápidos
+- `R`: Reset view (restaura cámara)
+- `M`: Modo Mesh (solo malla)
+- `P`: Modo Points (solo puntos)
+- `B`: Modo Both (ambos)
+- `G`: Toggle grid
+- `A`: Toggle axes
+
+#### Detalles Técnicos
+
+##### OrbitControls Mejorados
+**Configuración en MeshViewer.jsx:**
+```jsx
+<OrbitControls
+  ref={controlsRef}
+  enableDamping={true}         // Movimientos suaves con inercia
+  dampingFactor={0.05}         // Factor de damping (más bajo = más suave)
+  rotateSpeed={0.5}            // Velocidad de rotación
+  zoomSpeed={0.8}              // Velocidad de zoom
+  enablePan={true}             // Habilita pan
+  enableZoom={true}            // Habilita zoom
+  enableRotate={true}          // Habilita rotación
+  minDistance={0.5}            // Distancia mínima de cámara
+  maxDistance={100}            // Distancia máxima de cámara
+/>
+```
+
+##### Estados de Vista
+**Componente gestiona tres estados de visualización:**
+```javascript
+const [viewMode, setViewMode] = useState('mesh');  // 'mesh', 'pointcloud', 'both'
+const [showGrid, setShowGrid] = useState(true);
+const [showAxes, setShowAxes] = useState(true);
+```
+
+##### Renderizado Condicional
+```jsx
+{/* Renderiza Mesh si viewMode === 'mesh' o 'both' */}
+{(viewMode === 'mesh' || viewMode === 'both') && (
+  <MeshRenderer vertices={...} triangles={...} colors={...} />
+)}
+
+{/* Renderiza Point Cloud si viewMode === 'pointcloud' o 'both' */}
+{(viewMode === 'pointcloud' || viewMode === 'both') && pointCloudData && (
+  <PointCloudRenderer positions={...} colors={...} />
+)}
+
+{/* Helpers condicionales */}
+{showGrid && <gridHelper args={[10, 10, '#3f3f46', '#27272a']} />}
+{showAxes && <axesHelper args={[1]} />}
+```
+
+##### Manejo de Eventos de Teclado
+```javascript
+useEffect(() => {
+  const handleKeyPress = (e) => {
+    switch (e.key.toLowerCase()) {
+      case 'r': handleResetView(); break;
+      case 'm': setViewMode('mesh'); break;
+      case 'p': setViewMode('pointcloud'); break;
+      case 'b': setViewMode('both'); break;
+      case 'g': toggleGrid(); break;
+      case 'a': toggleAxes(); break;
+    }
+  };
+  window.addEventListener('keydown', handleKeyPress);
+  return () => window.removeEventListener('keydown', handleKeyPress);
+}, []);
+```
+
+##### Panel de Controles
+El panel de controles muestra:
+- **Display Mode**: Botones para Mesh / Points / Both
+- **Helpers**: Toggle para Grid y Axes
+- **Reset View**: Botón para resetear cámara
+- **Back**: Botón para cerrar el visor
+- **Shortcuts**: Ayuda con atajos de teclado
+
+#### Pruebas
+
+##### Frontend Tests (Vitest)
+**Archivo**: `react-frontend/src/test/MeshViewer.test.jsx`
+
+**Tests de US-07:**
+```javascript
+describe('MeshViewer - US-07: Advanced 3D Interaction Controls', () => {
+  it('displays reset view button')
+  it('displays view mode toggle buttons')
+  it('toggles view mode when clicking buttons')
+  it('displays helper toggle buttons for grid and axes')
+  it('toggles grid visibility when clicking grid button')
+  it('displays keyboard shortcuts help')
+  it('handles keyboard shortcuts for view mode')
+  it('calls onBack when back button is clicked')
+  it('fetches both mesh and point cloud data on mount')
+  it('gracefully handles missing point cloud data')
+})
+```
+
+**Ejecutar tests:**
+```bash
+# Tests específicos de MeshViewer
+cd react-frontend
+npm test -- MeshViewer.test.jsx
+
+# Todos los tests del frontend
+make dev-test-frontend
+```
+
+##### Tests de Interacción Manual
+1. **Test de Rotación**:
+   - Abrir visor de mallas
+   - Click izquierdo + arrastrar en varias direcciones
+   - Verificar rotación suave sin saltos
+   
+2. **Test de Zoom**:
+   - Rueda del mouse hacia adelante/atrás
+   - Verificar zoom suave sin distorsión
+   - Verificar límites min/max distance
+   
+3. **Test de Pan**:
+   - Click derecho + arrastrar
+   - Verificar movimiento lateral suave
+   
+4. **Test de Reset View**:
+   - Rotar, zoom y pan a posición aleatoria
+   - Presionar `R` o botón "Reset View"
+   - Verificar que vuelve a posición inicial
+   
+5. **Test de Toggle de Vistas**:
+   - Alternar entre Mesh / Points / Both
+   - Verificar que cada modo renderiza correctamente
+   - Verificar que botones deshabilitados funcionan correctamente
+   
+6. **Test de Helpers**:
+   - Toggle grid on/off con `G`
+   - Toggle axes on/off con `A`
+   - Verificar que aparecen/desaparecen correctamente
+
+#### Casos de Uso
+
+##### Caso 1: Inspección de Calidad de Malla
+**Objetivo**: Evaluar si la malla generada captura bien la geometría original
+
+1. Genera una malla con algoritmo Delaunay (alpha = 1.0)
+2. Abre el visor en modo "**Mesh**"
+3. Rota la malla para examinar desde todos los ángulos
+4. Zoom in para inspeccionar detalles finos
+5. Presiona `P` para ver los puntos originales
+6. Presiona `B` para ver ambos superpuestos
+7. Evalúa visualmente la fidelidad de la reconstrucción
+8. Si no es satisfactorio, ajusta parámetros y regenera
+
+##### Caso 2: Comparación de Algoritmos
+**Objetivo**: Decidir qué algoritmo funciona mejor para un dataset
+
+1. Genera malla con Delaunay (alpha = 1.0)
+2. Visualiza y examina con controles de cámara
+3. Toma nota mental de áreas problemáticas
+4. Cierra visor y regenera con Poisson (depth = 9)
+5. Compara visualmente ambas reconstrucciones
+6. Regenera con Threshold si hay mucho ruido
+7. Selecciona el algoritmo que mejor preserve la geometría
+
+##### Caso 3: Preparación de Datos para Exportación
+**Objetivo**: Verificar que la malla está lista para uso en otra aplicación
+
+1. Abre malla en visor
+2. Zoom in para verificar que no hay huecos
+3. Rota 360° para verificar cobertura completa
+4. Presiona `B` para comparar con puntos originales
+5. Verifica que grid y axes están correctamente orientados
+6. Confirma que escala es apropiada
+7. Exporta malla si pasa validación visual
+
+##### Caso 4: Presentación o Demostración
+**Objetivo**: Mostrar las capacidades de la aplicación a stakeholders
+
+1. Carga una nube de puntos de ejemplo (e.g., sphere.pts)
+2. Genera malla con parámetros predeterminados
+3. Abre visor en modo "**Both**" para mostrar punto vs malla
+4. Usa controles de rotación para mostrar desde varios ángulos
+5. Toggle entre modos para demostrar capacidad de visualización dual
+6. Usa `R` para reset entre demostraciones
+7. Explica shortcuts para mostrar facilidad de uso
+
+#### Optimizaciones de Rendimiento
+
+##### Sampling de Nube de Puntos
+- Carga solo 30% de puntos originales (`?sample=0.3`)
+- Reduce carga de memoria sin pérdida visual significativa
+- Mejora FPS en modo "Both"
+
+##### Damping en OrbitControls
+- `dampingFactor=0.05` proporciona movimiento suave
+- Reduce sacudidas y mejora experiencia de usuario
+- No impacta performance negativamente
+
+##### Renderizado Condicional
+- Solo renderiza geometrías visibles según `viewMode`
+- Grid y axes solo se renderizan si están habilitados
+- Reduce trabajo de GPU innecesario
+
+##### Límites de Distancia de Cámara
+- `minDistance=0.5` previene zoom excesivo
+- `maxDistance=100` previene pérdida de contexto
+- Mantiene malla visible en todo momento
+
+#### Limitaciones Conocidas
+
+##### Modo "Both" con Mallas Grandes
+- Renderizar malla + puntos simultáneamente puede causar lag
+- Recomendado: usar solo para mallas <100k triángulos
+- Solución futura: downsampling automático
+
+##### Atajos de Teclado en Móviles
+- No hay teclado físico en dispositivos móviles
+- Usuarios deben usar botones en pantalla
+- Los controles táctiles funcionan correctamente
+
+##### Point Cloud Data Ausente
+- Si falla la carga de punto cloud, modos "Points" y "Both" se deshabilitan
+- Fallback: solo modo "Mesh" disponible
+- Mensaje visual indica que puntos no están disponibles
+
+##### Reset View con OrbitControls
+- Reset restablece a posición inicial de OrbitControls
+- No restaura posición calculada por `boundingSphere`
+- Puede requerir ajuste manual después de reset
+
 #### Próximas Mejoras (Roadmap)
 - [x] Soporte para algoritmo de reconstrucción Poisson ✅ **IMPLEMENTADO**
 - [x] Soporte para algoritmo de threshold mesh ✅ **IMPLEMENTADO**
 - [x] Visualización interactiva de mallas generadas con toggle ✅ **IMPLEMENTADO (US-06)**
+- [x] Controles avanzados de interacción 3D con atajos de teclado ✅ **IMPLEMENTADO (US-07)**
 - [ ] Exportación de mallas en formatos .ply y .obj desde UI
 - [ ] Procesamiento asíncrono con Celery para nubes grandes (>100k puntos)
 - [ ] Preview en miniatura de la malla en la tarjeta
@@ -1269,6 +1560,9 @@ python manage.py test api.tests.PointCloudTriangulateTestCase
 - [ ] Level of Detail (LOD) para mallas muy grandes
 - [ ] Wireframe mode toggle para análisis de topología
 - [ ] Medición de distancias y áreas en las mallas
+- [ ] Selección y highlighting de múltiples mallas
+- [ ] Animaciones de transición entre modos de vista
+- [ ] Guardado de preferencias de visualización del usuario
 
 
 
