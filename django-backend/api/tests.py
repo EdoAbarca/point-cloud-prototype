@@ -402,3 +402,255 @@ class PointCloudDataViewTestCase(TestCase):
         # Should return all points
         data = response.json()
         self.assertGreater(data['num_points'], 0)
+
+
+class PointCloudTriangulationTestCase(TestCase):
+    """
+    Test cases for Delaunay triangulation mesh generation functionality.
+    """
+    
+    def setUp(self):
+        """
+        Set up test client and upload a test point cloud.
+        """
+        self.client = APIClient()
+        
+        # Path to test files
+        self.base_dir = Path(__file__).resolve().parent.parent.parent
+        self.test_files_dir = self.base_dir / 'figures'
+        
+        # Upload a test point cloud
+        test_file_path = self.test_files_dir / 'cube.pts'
+        
+        with open(test_file_path, 'rb') as f:
+            file_content = f.read()
+        
+        uploaded_file = SimpleUploadedFile(
+            'cube.pts',
+            file_content,
+            content_type='application/octet-stream'
+        )
+        
+        upload_response = self.client.post(
+            '/api/point_cloud',
+            {'file': uploaded_file, 'name': 'Test Cube'},
+            format='multipart'
+        )
+        
+        self.point_cloud_id = upload_response.data['data']['id']
+    
+    def tearDown(self):
+        """
+        Clean up uploaded files and generated meshes after each test.
+        """
+        for pc in PointCloud.objects.all():
+            if pc.file:
+                pc.file.delete()
+            if pc.mesh_file:
+                # Delete mesh file if it exists
+                try:
+                    if os.path.exists(pc.mesh_file.path):
+                        os.remove(pc.mesh_file.path)
+                except:
+                    pass
+            pc.delete()
+    
+    def test_triangulate_point_cloud_success(self):
+        """
+        Test successful Delaunay triangulation of a point cloud.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        self.assertIn('message', data)
+        self.assertIn('data', data)
+        self.assertIn('mesh_file', data['data'])
+        self.assertIn('metadata', data['data'])
+        
+        # Verify metadata
+        metadata = data['data']['metadata']
+        self.assertEqual(metadata['algorithm'], 'delaunay')
+        self.assertEqual(metadata['alpha'], 1.0)
+        self.assertGreater(metadata['vertices'], 0)
+        self.assertGreater(metadata['triangles'], 0)
+        self.assertGreater(metadata['processing_time'], 0)
+        
+        # Verify point cloud object was updated
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertIsNotNone(point_cloud.mesh_file)
+        self.assertIsNotNone(point_cloud.mesh_metadata)
+        self.assertTrue(os.path.exists(point_cloud.mesh_file.path))
+    
+    def test_triangulate_with_custom_alpha(self):
+        """
+        Test triangulation with a custom alpha parameter.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 0.5},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        metadata = data['data']['metadata']
+        self.assertEqual(metadata['alpha'], 0.5)
+    
+    def test_triangulate_with_default_alpha(self):
+        """
+        Test that triangulation uses default alpha when not provided.
+        """
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        data = response.json()
+        metadata = data['data']['metadata']
+        self.assertEqual(metadata['alpha'], 1.0)
+    
+    def test_triangulate_with_invalid_alpha(self):
+        """
+        Test that triangulation rejects invalid alpha parameters.
+        """
+        # Negative alpha
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': -1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+        
+        # Zero alpha
+        response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+    
+    def test_triangulate_invalid_point_cloud_id(self):
+        """
+        Test triangulation with non-existent point cloud ID.
+        """
+        response = self.client.post(
+            '/api/point_cloud/99999/triangulate',
+            {'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.json())
+    
+    def test_get_mesh_data_success(self):
+        """
+        Test successful retrieval of mesh data.
+        """
+        # First generate the mesh
+        triangulate_response = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(triangulate_response.status_code, status.HTTP_201_CREATED)
+        
+        # Then retrieve the mesh data
+        response = self.client.get(
+            f'/api/point_cloud/{self.point_cloud_id}/mesh'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        data = response.json()
+        self.assertIn('message', data)
+        self.assertIn('data', data)
+        self.assertIn('metadata', data)
+        
+        mesh_data = data['data']
+        self.assertIn('vertices', mesh_data)
+        self.assertIn('triangles', mesh_data)
+        self.assertIn('colors', mesh_data)
+        
+        # Verify data structure
+        self.assertGreater(len(mesh_data['vertices']), 0)
+        self.assertGreater(len(mesh_data['triangles']), 0)
+        
+        # Verify vertex format [x, y, z]
+        first_vertex = mesh_data['vertices'][0]
+        self.assertEqual(len(first_vertex), 3)
+        
+        # Verify triangle format [v1, v2, v3]
+        first_triangle = mesh_data['triangles'][0]
+        self.assertEqual(len(first_triangle), 3)
+        
+        # Verify color format [r, g, b]
+        first_color = mesh_data['colors'][0]
+        self.assertEqual(len(first_color), 3)
+    
+    def test_get_mesh_data_without_generation(self):
+        """
+        Test that retrieving mesh data without generating mesh returns 404.
+        """
+        response = self.client.get(
+            f'/api/point_cloud/{self.point_cloud_id}/mesh'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        
+        data = response.json()
+        self.assertIn('error', data)
+    
+    def test_get_mesh_data_invalid_id(self):
+        """
+        Test mesh data retrieval with non-existent point cloud ID.
+        """
+        response = self.client.get('/api/point_cloud/99999/mesh')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.json())
+    
+    def test_regenerate_mesh_overwrites_previous(self):
+        """
+        Test that regenerating mesh with different parameters overwrites the previous one.
+        """
+        # Generate first mesh with alpha=1.0
+        response1 = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 1.0},
+            format='json'
+        )
+        
+        self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
+        first_mesh_file = response1.json()['data']['mesh_file']
+        
+        # Generate second mesh with alpha=0.5
+        response2 = self.client.post(
+            f'/api/point_cloud/{self.point_cloud_id}/triangulate',
+            {'alpha': 0.5},
+            format='json'
+        )
+        
+        self.assertEqual(response2.status_code, status.HTTP_201_CREATED)
+        second_metadata = response2.json()['data']['metadata']
+        
+        # Verify the alpha parameter was updated
+        self.assertEqual(second_metadata['alpha'], 0.5)
+        
+        # Verify point cloud has the latest mesh metadata
+        point_cloud = PointCloud.objects.get(pk=self.point_cloud_id)
+        self.assertEqual(point_cloud.mesh_metadata['alpha'], 0.5)
