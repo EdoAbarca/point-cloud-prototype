@@ -184,6 +184,20 @@ class LoginView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
+            # Check if user exists and is active before authentication
+            try:
+                user_obj = User.objects.get(username=email)
+                if not user_obj.is_active:
+                    return Response(
+                        {
+                            "message": "Account is inactive. Please contact support.",
+                            "data": None
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except User.DoesNotExist:
+                pass  # Will be handled by authenticate returning None
+            
             # Authenticate user
             user = authenticate(username=email, password=password)
             
