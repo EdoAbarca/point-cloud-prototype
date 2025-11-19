@@ -9,8 +9,13 @@ from .views_pointcloud import (
     PointCloudThresholdMeshView,
     PointCloudMeshDataView
 )
+from .views_auth import RegisterView, LoginView
 
 urlpatterns = [
+    # Authentication API (User Story 8)
+    path("auth/register", RegisterView.as_view(), name='auth-register'),
+    path("auth/login", LoginView.as_view(), name='auth-login'),
+    
     # Point Cloud Upload/List API (User Story 1)
     path("point_cloud", PointCloudUploadView.as_view(), name='point-cloud-upload'),
     path("point_cloud/<int:pk>", PointCloudDetailView.as_view(), name='point-cloud-detail'),

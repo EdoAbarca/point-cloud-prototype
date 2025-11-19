@@ -1544,11 +1544,383 @@ make dev-test-frontend
 - No restaura posición calculada por `boundingSphere`
 - Puede requerir ajuste manual después de reset
 
+### US-08: Registro de Usuarios (NEW)
+La aplicación ahora incluye un sistema completo de autenticación de usuarios con registro seguro, inicio de sesión y gestión de tokens JWT.
+
+#### Características Principales
+- **Registro seguro de usuarios**: Formulario de registro con validación completa
+- **Autenticación JWT**: Tokens de acceso y refresh para sesiones seguras
+- **Validación de contraseñas**: Requisitos de seguridad aplicados en frontend y backend
+- **Hash de contraseñas**: Almacenamiento seguro usando algoritmos de Django
+- **Validación de email**: Formato correcto y unicidad verificada
+- **Manejo de errores**: Mensajes claros para problemas de validación
+- **Loading states**: Indicadores visuales durante operaciones asíncronas
+- **Auto-login**: Redirección automática después de registro exitoso
+
+#### Cómo Usar el Sistema de Autenticación
+
+##### Registro de Nuevo Usuario
+1. Navega a `/register` o haz clic en "Create account" desde cualquier vista
+2. Completa el formulario de registro:
+   - **Email**: Ingresa un email válido (será usado como username)
+   - **Password**: Ingresa una contraseña segura (mínimo 8 caracteres, letras y números)
+   - **Confirm Password**: Reingresa la contraseña para confirmar
+3. Haz clic en "**Create account**"
+4. Si el registro es exitoso:
+   - Los tokens JWT se almacenan en `localStorage`
+   - Redirección automática a la biblioteca de nubes de puntos (`/points`)
+5. Si hay errores:
+   - Mensajes claros indican qué necesita corregirse
+   - Corrige los errores y vuelve a intentar
+
+##### Inicio de Sesión
+1. Navega a `/login` o haz clic en "Sign in" desde el registro
+2. Ingresa tus credenciales:
+   - **Email**: Tu email registrado
+   - **Password**: Tu contraseña
+3. Haz clic en "**Sign in**"
+4. Si las credenciales son correctas:
+   - Tokens JWT almacenados en `localStorage`
+   - Redirección a `/points`
+5. Si las credenciales son incorrectas:
+   - Mensaje de error: "Invalid email or password"
+
+#### Detalles Técnicos
+
+##### Backend (Django + JWT)
+
+**Endpoints API:**
+
+###### POST `/api/auth/register` - Registro de Usuario
+Crea una nueva cuenta de usuario con validación completa.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+**Response (Éxito - 201 CREATED):**
+```json
+{
+  "message": "User registered successfully",
+  "data": {
+    "id": 1,
+    "email": "user@example.com",
+    "tokens": {
+      "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+      "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc..."
+    }
+  }
+}
+```
+
+**Response (Error - 400 BAD REQUEST):**
+```json
+{
+  "message": "Email already registered",
+  "data": null
+}
+```
+
+**Validaciones:**
+- ✅ Email válido (formato correcto)
+- ✅ Email único (no duplicados)
+- ✅ Contraseña presente
+- ✅ Contraseña mínimo 8 caracteres
+- ✅ Contraseña no muy común
+- ✅ Contraseña no totalmente numérica
+- ✅ Contraseña no similar al email
+
+###### POST `/api/auth/login` - Inicio de Sesión
+Autentica un usuario existente y devuelve tokens JWT.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+**Response (Éxito - 200 OK):**
+```json
+{
+  "message": "Login successful",
+  "data": {
+    "id": 1,
+    "email": "user@example.com",
+    "tokens": {
+      "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+      "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc..."
+    }
+  }
+}
+```
+
+**Response (Error - 401 UNAUTHORIZED):**
+```json
+{
+  "message": "Invalid email or password",
+  "data": null
+}
+```
+
+**Configuración JWT:**
+```python
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+```
+
+**Modelo de Usuario:**
+- Utiliza `django.contrib.auth.models.User` estándar
+- `username` = email (en minúsculas)
+- `email` = email del usuario
+- `password` = hash seguro (pbkdf2_sha256)
+
+**Seguridad:**
+- Contraseñas hasheadas con `pbkdf2_sha256` (Django default)
+- Validación con `django.contrib.auth.password_validation`
+- Email convertido a minúsculas para consistencia
+- Tokens JWT firmados con SECRET_KEY
+- CORS configurado para frontend autorizado
+
+##### Frontend (React + JWT)
+
+**Componentes:**
+- `RegisterView.jsx`: Formulario completo de registro
+- `LoginView.jsx`: Formulario de inicio de sesión
+
+**Validación en Frontend:**
+```javascript
+// Email validation
+const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Password validation
+if (password.length < 8) {
+  return 'Password must be at least 8 characters long';
+}
+if (!/(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
+  return 'Password must contain at least one letter and one number';
+}
+```
+
+**Manejo de Tokens:**
+```javascript
+// Después de registro/login exitoso
+localStorage.setItem('access_token', data.data.tokens.access);
+localStorage.setItem('refresh_token', data.data.tokens.refresh);
+localStorage.setItem('user_email', data.data.email);
+localStorage.setItem('user_id', data.data.id);
+```
+
+**Estados de UI:**
+- 🔵 **Loading**: Spinner durante request, botón deshabilitado
+- ✅ **Success**: Tokens guardados, redirección automática
+- ❌ **Error**: Mensaje de error descriptivo con opción de reintentar
+
+**Características de UX:**
+- Validación en tiempo real
+- Mensajes de error claros y específicos
+- Loading indicators durante operaciones asíncronas
+- Links de navegación entre login y registro
+- Diseño responsive (móvil y desktop)
+- Tema oscuro (zinc-900) consistente con la aplicación
+
+#### Pruebas
+
+##### Backend Tests (pytest-django)
+**Archivo**: `django-backend/api/tests_auth.py`
+
+**Tests de Registro:**
+```python
+def test_successful_registration()
+def test_duplicate_email_registration()
+def test_invalid_email_format()
+def test_missing_email()
+def test_missing_password()
+def test_weak_password_too_short()
+def test_weak_password_common()
+def test_weak_password_numeric_only()
+def test_email_case_insensitive()
+def test_password_is_hashed()
+```
+
+**Tests de Login:**
+```python
+def test_successful_login()
+def test_invalid_password()
+def test_nonexistent_user()
+def test_missing_email()
+def test_missing_password()
+def test_case_insensitive_email_login()
+```
+
+**Ejecutar tests:**
+```bash
+# Backend tests
+make dev-test-backend
+
+# Solo tests de autenticación
+cd django-backend
+source .venv/bin/activate
+python manage.py test api.tests_auth
+```
+
+##### Frontend Tests (Vitest)
+**Archivos**: 
+- `react-frontend/src/test/RegisterView.test.jsx`
+- `react-frontend/src/test/LoginView.test.jsx`
+
+**Tests de Registro:**
+```javascript
+it('renders registration form correctly')
+it('validates required fields')
+it('validates email format')
+it('validates password length')
+it('validates password complexity')
+it('validates password confirmation match')
+it('submits form successfully and navigates')
+it('displays error message when registration fails')
+it('displays loading state during submission')
+it('handles network errors gracefully')
+it('navigates to login page when clicking sign in link')
+it('displays password validation errors from backend')
+```
+
+**Tests de Login:**
+```javascript
+it('renders login form correctly')
+it('validates required fields')
+it('submits form successfully and navigates')
+it('displays error message when login fails')
+it('displays loading state during submission')
+it('handles network errors gracefully')
+it('navigates to register page when clicking create account link')
+```
+
+**Ejecutar tests:**
+```bash
+# Frontend tests
+make dev-test-frontend
+
+# Solo tests de autenticación
+cd react-frontend
+npm test -- RegisterView.test.jsx
+npm test -- LoginView.test.jsx
+```
+
+#### Casos de Uso
+
+##### Caso 1: Nuevo Usuario se Registra
+1. Usuario visita la aplicación por primera vez
+2. Hace clic en "Create account" o navega a `/register`
+3. Completa el formulario:
+   - Email: `newuser@example.com`
+   - Password: `SecurePass123!`
+   - Confirm: `SecurePass123!`
+4. Sistema valida en frontend antes de enviar
+5. Backend crea usuario y devuelve tokens JWT
+6. Usuario es redirigido automáticamente a `/points`
+7. Puede empezar a cargar y visualizar nubes de puntos
+
+##### Caso 2: Usuario Intenta Registrarse con Email Existente
+1. Usuario intenta registrarse
+2. Ingresa email ya registrado: `existing@example.com`
+3. Frontend valida formato (OK)
+4. Backend detecta duplicado
+5. Sistema muestra: "Email already registered"
+6. Usuario puede:
+   - Intentar con otro email
+   - Ir a login si ya tiene cuenta
+
+##### Caso 3: Usuario Ingresa Contraseña Débil
+1. Usuario completa formulario de registro
+2. Ingresa contraseña: `pass`
+3. Frontend valida inmediatamente:
+   - Error: "Password must be at least 8 characters long"
+4. Usuario corrige a: `password123`
+5. Frontend valida:
+   - Formato OK (8+ chars, letras + números)
+6. Backend valida adicionalmente:
+   - Error: "This password is too common"
+7. Usuario debe elegir contraseña más segura
+8. Ingresa: `MyUniquePass2024!`
+9. Registro exitoso
+
+##### Caso 4: Usuario Inicia Sesión
+1. Usuario registrado visita `/login`
+2. Ingresa credenciales:
+   - Email: `user@example.com`
+   - Password: `MySecurePass123!`
+3. Sistema autentica con Django
+4. Tokens JWT almacenados en localStorage
+5. Redirección a `/points`
+6. Usuario puede acceder a funcionalidades protegidas
+
+#### Seguridad
+
+##### Implementada
+- ✅ Contraseñas hasheadas con pbkdf2_sha256
+- ✅ Validación de contraseñas en múltiples niveles
+- ✅ Tokens JWT con expiración (1 hora access, 7 días refresh)
+- ✅ CORS configurado solo para orígenes autorizados
+- ✅ SQL Injection prevenido (Django ORM)
+- ✅ XSS prevenido (React escapa HTML automáticamente)
+- ✅ Email case-insensitive para evitar duplicados sutiles
+
+##### Futuras Mejoras
+- [ ] Verificación de email por correo electrónico
+- [ ] Recuperación de contraseña (forgot password)
+- [ ] Refresh token rotation para mayor seguridad
+- [ ] Rate limiting en endpoints de autenticación
+- [ ] HTTPS obligatorio en producción
+- [ ] 2FA (two-factor authentication)
+- [ ] Logging de intentos fallidos de login
+- [ ] Bloqueo temporal después de X intentos fallidos
+- [ ] Política de expiración de contraseñas
+- [ ] OAuth2 (Google, GitHub login)
+
+#### Limitaciones Conocidas
+
+##### Tokens en localStorage
+- localStorage es vulnerable a XSS
+- Alternativa futura: httpOnly cookies
+- Mitigado: React escapa contenido automáticamente
+
+##### Sin Verificación de Email
+- Usuarios pueden registrarse con emails falsos
+- Implementar en US futura
+- No crítico para MVP
+
+##### Sin Rate Limiting
+- Posible ataque de fuerza bruta
+- Implementar middleware de throttling
+- Django Rest Framework tiene soporte built-in
+
+##### Sin Refresh Token Endpoint
+- Tokens expiran después de 1 hora
+- Usuario debe hacer login nuevamente
+- Implementar endpoint `/api/auth/refresh` en futuro
+
 #### Próximas Mejoras (Roadmap)
 - [x] Soporte para algoritmo de reconstrucción Poisson ✅ **IMPLEMENTADO**
 - [x] Soporte para algoritmo de threshold mesh ✅ **IMPLEMENTADO**
 - [x] Visualización interactiva de mallas generadas con toggle ✅ **IMPLEMENTADO (US-06)**
 - [x] Controles avanzados de interacción 3D con atajos de teclado ✅ **IMPLEMENTADO (US-07)**
+- [x] Sistema de autenticación con registro y login ✅ **IMPLEMENTADO (US-08)**
+- [ ] Verificación de email para nuevos usuarios
+- [ ] Recuperación de contraseña (forgot password)
+- [ ] Endpoint de refresh token para renovar sesiones
+- [ ] Protección de endpoints con autenticación requerida
+- [ ] Asociación de point clouds con usuarios específicos
+- [ ] Dashboard de usuario con estadísticas
 - [ ] Exportación de mallas en formatos .ply y .obj desde UI
 - [ ] Procesamiento asíncrono con Celery para nubes grandes (>100k puntos)
 - [ ] Preview en miniatura de la malla en la tarjeta
