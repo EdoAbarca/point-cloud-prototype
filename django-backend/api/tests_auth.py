@@ -319,3 +319,49 @@ class LoginViewTest(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['message'], 'Login successful')
+    
+    def test_inactive_user_login(self):
+        """Test login with inactive user account."""
+        # Deactivate user account
+        self.user.is_active = False
+        self.user.save()
+        
+        response = self.client.post(
+            self.login_url,
+            data=json.dumps({
+                'email': self.test_email,
+                'password': self.test_password
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('message', response.data)
+        self.assertEqual(response.data['message'], 'Account is inactive. Please contact support.')
+    
+    def test_jwt_tokens_are_valid(self):
+        """Test that JWT tokens returned are valid and contain correct user info."""
+        response = self.client.post(
+            self.login_url,
+            data=json.dumps({
+                'email': self.test_email,
+                'password': self.test_password
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify tokens are present and non-empty
+        access_token = response.data['data']['tokens']['access']
+        refresh_token = response.data['data']['tokens']['refresh']
+        
+        self.assertIsNotNone(access_token)
+        self.assertIsNotNone(refresh_token)
+        self.assertTrue(len(access_token) > 0)
+        self.assertTrue(len(refresh_token) > 0)
+        
+        # Verify we can decode the access token
+        from rest_framework_simplejwt.tokens import AccessToken
+        token = AccessToken(access_token)
+        self.assertEqual(token['user_id'], self.user.id)

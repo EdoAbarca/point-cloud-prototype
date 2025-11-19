@@ -1544,18 +1544,30 @@ make dev-test-frontend
 - No restaura posición calculada por `boundingSphere`
 - Puede requerir ajuste manual después de reset
 
-### US-08: Registro de Usuarios (NEW)
-La aplicación ahora incluye un sistema completo de autenticación de usuarios con registro seguro, inicio de sesión y gestión de tokens JWT.
+### US-08: Registro de Usuarios
+La aplicación incluye un sistema completo de registro de usuarios con validación robusta y seguridad mejorada.
 
 #### Características Principales
 - **Registro seguro de usuarios**: Formulario de registro con validación completa
-- **Autenticación JWT**: Tokens de acceso y refresh para sesiones seguras
 - **Validación de contraseñas**: Requisitos de seguridad aplicados en frontend y backend
 - **Hash de contraseñas**: Almacenamiento seguro usando algoritmos de Django
 - **Validación de email**: Formato correcto y unicidad verificada
 - **Manejo de errores**: Mensajes claros para problemas de validación
 - **Loading states**: Indicadores visuales durante operaciones asíncronas
-- **Auto-login**: Redirección automática después de registro exitoso
+- **Auto-login**: Redirección automática después de registro exitoso con tokens JWT
+
+### US-09: Autenticación de Usuarios (NEW)
+La aplicación ahora incluye un sistema completo de autenticación que permite a los usuarios registrados iniciar sesión de forma segura para acceder y gestionar sus nubes de puntos y mallas 3D.
+
+#### Características Principales
+- **Login seguro**: Formulario de inicio de sesión con validación de credenciales
+- **Autenticación JWT**: Tokens de acceso y refresh para sesiones seguras
+- **Validación de cuentas activas**: Sistema previene login de cuentas inactivas
+- **Protección contra ataques**: Mensajes genéricos para credenciales inválidas
+- **Sesión persistente**: Tokens almacenados en localStorage para mantener sesión
+- **Manejo de errores**: Mensajes claros y específicos según tipo de error
+- **Loading states**: Indicadores visuales durante autenticación
+- **Redirección automática**: Usuario redirigido a dashboard tras login exitoso
 
 #### Cómo Usar el Sistema de Autenticación
 
@@ -1668,6 +1680,29 @@ Autentica un usuario existente y devuelve tokens JWT.
 }
 ```
 
+**Response (Error - 403 FORBIDDEN - Cuenta Inactiva):**
+```json
+{
+  "message": "Account is inactive. Please contact support.",
+  "data": null
+}
+```
+
+**Validaciones:**
+- ✅ Email y password requeridos
+- ✅ Credenciales válidas contra base de datos
+- ✅ Cuenta debe estar activa (`is_active=True`)
+- ✅ Email case-insensitive (convierte a minúsculas)
+- ✅ Genera tokens JWT válidos
+- ✅ Actualiza `last_login` del usuario
+
+**Seguridad:**
+- 🔒 Mensaje genérico para credenciales inválidas (previene enumeración)
+- 🔒 No expone si email existe o no en sistema
+- 🔒 Verifica estado activo de cuenta antes de emitir tokens
+- 🔒 Contraseñas nunca expuestas en logs o respuestas
+- 🔒 Autenticación usando `django.contrib.auth.authenticate`
+
 **Configuración JWT:**
 ```python
 SIMPLE_JWT = {
@@ -1760,6 +1795,8 @@ def test_nonexistent_user()
 def test_missing_email()
 def test_missing_password()
 def test_case_insensitive_email_login()
+def test_inactive_user_login()
+def test_jwt_tokens_are_valid()
 ```
 
 **Ejecutar tests:**
@@ -1860,9 +1897,40 @@ npm test -- LoginView.test.jsx
    - Email: `user@example.com`
    - Password: `MySecurePass123!`
 3. Sistema autentica con Django
-4. Tokens JWT almacenados en localStorage
-5. Redirección a `/points`
-6. Usuario puede acceder a funcionalidades protegidas
+4. Backend verifica:
+   - Credenciales correctas
+   - Cuenta activa (`is_active=True`)
+5. Tokens JWT generados y almacenados en localStorage
+6. Redirección automática a `/points`
+7. Usuario puede acceder a funcionalidades protegidas
+
+##### Caso 5: Usuario Intenta Login con Cuenta Inactiva
+1. Administrador desactiva cuenta de usuario por alguna razón
+2. Usuario intenta iniciar sesión
+3. Ingresa credenciales correctas
+4. Backend valida credenciales (OK)
+5. Backend detecta `is_active=False`
+6. Sistema responde: "Account is inactive. Please contact support."
+7. Usuario recibe HTTP 403 FORBIDDEN
+8. Usuario debe contactar soporte para reactivar cuenta
+
+##### Caso 6: Usuario Ingresa Credenciales Incorrectas
+1. Usuario intenta iniciar sesión
+2. Ingresa email correcto pero contraseña incorrecta
+3. Sistema responde: "Invalid email or password"
+4. Usuario no puede determinar si email o password es incorrecto (seguridad)
+5. Usuario puede:
+   - Reintentar con credenciales correctas
+   - Usar "forgot password" (feature futura)
+
+##### Caso 7: Usuario Intenta Login con Email No Registrado
+1. Usuario intenta iniciar sesión
+2. Ingresa email que no existe en base de datos
+3. Sistema responde: "Invalid email or password"
+4. Mismo mensaje que password incorrecta (previene enumeración de usuarios)
+5. Usuario puede:
+   - Verificar email es correcto
+   - Registrarse si no tiene cuenta
 
 #### Seguridad
 
@@ -1874,6 +1942,9 @@ npm test -- LoginView.test.jsx
 - ✅ SQL Injection prevenido (Django ORM)
 - ✅ XSS prevenido (React escapa HTML automáticamente)
 - ✅ Email case-insensitive para evitar duplicados sutiles
+- ✅ Validación de cuentas activas (previene login de usuarios desactivados)
+- ✅ Mensajes genéricos de error (previene enumeración de usuarios)
+- ✅ Autenticación segura con Django authentication backend
 
 ##### Futuras Mejoras
 - [ ] Verificación de email por correo electrónico
@@ -1914,7 +1985,8 @@ npm test -- LoginView.test.jsx
 - [x] Soporte para algoritmo de threshold mesh ✅ **IMPLEMENTADO**
 - [x] Visualización interactiva de mallas generadas con toggle ✅ **IMPLEMENTADO (US-06)**
 - [x] Controles avanzados de interacción 3D con atajos de teclado ✅ **IMPLEMENTADO (US-07)**
-- [x] Sistema de autenticación con registro y login ✅ **IMPLEMENTADO (US-08)**
+- [x] Sistema de registro de usuarios con validación robusta ✅ **IMPLEMENTADO (US-08)**
+- [x] Sistema de autenticación segura con JWT ✅ **IMPLEMENTADO (US-09)**
 - [ ] Verificación de email para nuevos usuarios
 - [ ] Recuperación de contraseña (forgot password)
 - [ ] Endpoint de refresh token para renovar sesiones
